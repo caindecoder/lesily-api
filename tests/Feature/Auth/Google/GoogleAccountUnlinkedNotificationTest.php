@@ -22,7 +22,7 @@ class GoogleAccountUnlinkedNotificationTest extends AuthTestCase
 {
     use InteractsWithQueuedReactors;
 
-    protected User $alice;
+    protected User $user;
 
     protected Company $company;
 
@@ -33,14 +33,14 @@ class GoogleAccountUnlinkedNotificationTest extends AuthTestCase
         parent::setUp();
 
         config(['app.debug' => false]);
-        $this->alice = User::factory()
+        $this->user = User::factory()
             ->withEmail(self::LOGIN_EMAIL)
             ->withPassword(self::LOGIN_PASSWORD)
             ->linkedToGoogle(self::GOOGLE_SUBJECT)
             ->create();
         $this->company = Company::factory()->onPlan(BillingPlan::Starter)->create();
-        $this->company->users()->attach($this->alice, ['role_id' => Role::factory()->create()->getKey()]);
-        $this->token = $this->aSessionFor($this->alice)->plainTextToken;
+        $this->company->users()->attach($this->user, ['role_id' => Role::factory()->create()->getKey()]);
+        $this->token = $this->aSessionFor($this->user)->plainTextToken;
     }
 
     #[Test]
@@ -54,7 +54,7 @@ class GoogleAccountUnlinkedNotificationTest extends AuthTestCase
 
         // Then the refusal sends her nothing
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
-        Notification::assertNothingSentTo($this->alice);
+        Notification::assertNothingSentTo($this->user);
     }
 
     #[Test]
@@ -91,11 +91,11 @@ class GoogleAccountUnlinkedNotificationTest extends AuthTestCase
         $response->assertNoContent();
 
         Notification::assertSentTo(
-            $this->alice,
+            $this->user,
             SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::GoogleAccountUnlinked
-                && $notification->companyName === $this->company->name
-                && $notification->companyId === null,
+            fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::GoogleAccountUnlinked
+                && $systemNotification->companyName === $this->company->name
+                && $systemNotification->companyId === null,
         );
     }
 }

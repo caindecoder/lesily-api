@@ -50,11 +50,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
     {
         // Given a user with an active session
         $user = $this->aRegisteredUser();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
         Notification::fake();
 
         // When they submit the wrong current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => 'wrong-password',
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -70,11 +70,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // Given a user who has opted their email out of the password-changed notice
         $user = $this->aRegisteredUser();
         NotificationPreference::factory()->mailDisabled($user, NotificationType::PasswordChanged)->create();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
         Mail::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -83,8 +83,8 @@ class PasswordChangedNotificationTest extends AuthTestCase
         $response->assertNoContent();
         Mail::assertQueued(
             SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->type === NotificationType::PasswordChanged
-                && $mail->hasTo($user->email),
+            fn (SystemNotificationMail $systemNotificationMail): bool => $systemNotificationMail->type === NotificationType::PasswordChanged
+                && $systemNotificationMail->hasTo($user->email),
         );
     }
 
@@ -92,11 +92,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
     public function when_the_password_is_changed_then_a_confirmation_is_sent(): void
     {
         // Given the employee of Contoso with an active session
-        $session = $this->aSessionFor($this->member);
+        $newAccessToken = $this->aSessionFor($this->member);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -148,11 +148,11 @@ class PasswordChangedNotificationTest extends AuthTestCase
     {
         // Given a user who belongs to no company
         $user = $this->aRegisteredUser();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -166,18 +166,18 @@ class PasswordChangedNotificationTest extends AuthTestCase
     {
         // Given the employee — defaultless, joined Contoso first — whose OLDEST membership was
         // inserted second: insertion order deliberately inverted vs joined time, so an unordered read picks wrong
-        $oldest = $this->attachCompany($this->member, now()->subDay());
-        $session = $this->aSessionFor($this->member);
+        $company = $this->attachCompany($this->member, now()->subDay());
+        $newAccessToken = $this->aSessionFor($this->member);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
         // Then the confirmation is labeled with the oldest membership's company
-        $this->assertConfirmationNames($response, $this->member, $oldest->name);
+        $this->assertConfirmationNames($response, $this->member, $company->name);
     }
 
     #[Test]
@@ -187,19 +187,19 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // id (uuid7, insertion-ordered) is the only thing separating them
         $user = $this->aRegisteredUser();
         $joinedAt = now();
-        $earlier = $this->attachCompany($user, $joinedAt);
+        $company = $this->attachCompany($user, $joinedAt);
         $this->attachCompany($user, $joinedAt);
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
         // Then the earlier-inserted row wins the tie — the id tiebreak keeps the label deterministic
-        $this->assertConfirmationNames($response, $user, $earlier->name);
+        $this->assertConfirmationNames($response, $user, $company->name);
     }
 
     #[Test]
@@ -207,20 +207,20 @@ class PasswordChangedNotificationTest extends AuthTestCase
     {
         // Given the employee whose default company — Contoso — had its membership removed,
         // leaving an older live one
-        $oldestLive = $this->attachCompany($this->member, now()->subDays(2));
+        $company = $this->attachCompany($this->member, now()->subDays(2));
         $this->member->forceFill(['default_company_id' => $this->company->getKey()])->save();
         $this->softDeleteMembership($this->company, $this->member);
-        $session = $this->aSessionFor($this->member);
+        $newAccessToken = $this->aSessionFor($this->member);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
         // Then the label falls back to the oldest LIVE membership — a dead default never leaks
-        $this->assertConfirmationNames($response, $this->member, $oldestLive->name);
+        $this->assertConfirmationNames($response, $this->member, $company->name);
     }
 
     #[Test]
@@ -229,31 +229,31 @@ class PasswordChangedNotificationTest extends AuthTestCase
         // Given the employee — first a member of Contoso — whose default is the NEWER, last-inserted
         // membership: the one neither an arbitrary-first nor an oldest-first read would pick
         $this->attachCompany($this->member, now()->subDays(2));
-        $default = $this->attachCompany($this->member, now());
-        $this->member->forceFill(['default_company_id' => $default->getKey()])->save();
-        $session = $this->aSessionFor($this->member);
+        $company = $this->attachCompany($this->member, now());
+        $this->member->forceFill(['default_company_id' => $company->getKey()])->save();
+        $newAccessToken = $this->aSessionFor($this->member);
         Notification::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
         // Then the confirmation is labeled with the default company — the user's own choice wins
-        $this->assertConfirmationNames($response, $this->member, $default->name);
+        $this->assertConfirmationNames($response, $this->member, $company->name);
     }
 
     #[Test]
     public function when_the_password_is_changed_then_the_confirmation_is_queued_not_sent_inline(): void
     {
         // Given the employee of Contoso with an active session, and the fakes armed
-        $session = $this->aSessionFor($this->member);
+        $newAccessToken = $this->aSessionFor($this->member);
         Notification::fake();
         Queue::fake();
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($session->plainTextToken, [
+        $response = $this->changePassword($newAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -276,9 +276,9 @@ class PasswordChangedNotificationTest extends AuthTestCase
         Notification::assertSentTo(
             $user,
             SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::PasswordChanged
-                && $notification->companyName === $companyName
-                && $notification->companyId === null,
+            fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::PasswordChanged
+                && $systemNotification->companyName === $companyName
+                && $systemNotification->companyId === null,
         );
     }
 

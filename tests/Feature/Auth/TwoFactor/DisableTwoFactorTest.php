@@ -157,14 +157,14 @@ class DisableTwoFactorTest extends AuthTestCase
     {
         // Given a 2FA user signed in on two devices — the current one plus one other
         $user = $this->aTwoFactorUser();
-        $current = $this->aSessionFor($user, 'web');
-        $other = $this->aSessionFor($user, 'mobile');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $otherNewAccessToken = $this->aSessionFor($user, 'mobile');
 
         // When they disable 2FA with the correct password on the current device
-        $response = $this->withToken($current->plainTextToken)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
+        $response = $this->withToken($currentNewAccessToken->plainTextToken)->deleteJson('/api/v1/auth/2fa', ['password' => self::LOGIN_PASSWORD]);
 
         // Then the disable succeeds, the other device no longer authenticates, and the current session survives
-        $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
+        $this->assertOtherSessionsRevoked($response, $currentNewAccessToken->plainTextToken, $otherNewAccessToken->plainTextToken);
     }
 
     #[Test]
@@ -222,20 +222,20 @@ class DisableTwoFactorTest extends AuthTestCase
 
     protected function assertTwoFactorStillEnabled(User $user): void
     {
-        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
-        $this->assertNotNull($stored->two_factor_secret, 'The TOTP secret must survive a refused disable.');
-        $this->assertNotNull($stored->two_factor_recovery_codes, 'Recovery codes must survive a refused disable.');
-        $this->assertNotNull($stored->two_factor_confirmed_at, '2FA must remain enabled after a refused disable.');
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertNotNull($user->two_factor_secret, 'The TOTP secret must survive a refused disable.');
+        $this->assertNotNull($user->two_factor_recovery_codes, 'Recovery codes must survive a refused disable.');
+        $this->assertNotNull($user->two_factor_confirmed_at, '2FA must remain enabled after a refused disable.');
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', User2FADisabled::class)->count(), 'A refused disable records no marker.');
     }
 
     protected function assertTwoFactorDisabled(TestResponse $response, User $user): void
     {
         $response->assertNoContent();
-        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
-        $this->assertNull($stored->two_factor_secret, 'The TOTP secret must be wiped.');
-        $this->assertNull($stored->two_factor_recovery_codes, 'Recovery codes must be wiped.');
-        $this->assertNull($stored->two_factor_confirmed_at, '2FA must be marked disabled.');
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertNull($user->two_factor_secret, 'The TOTP secret must be wiped.');
+        $this->assertNull($user->two_factor_recovery_codes, 'Recovery codes must be wiped.');
+        $this->assertNull($user->two_factor_confirmed_at, '2FA must be marked disabled.');
         $this->assertDisableMarkerRecorded($user);
     }
 

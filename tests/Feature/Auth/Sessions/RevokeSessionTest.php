@@ -33,10 +33,10 @@ class RevokeSessionTest extends AuthTestCase
     {
         // Given a user holding one active session
         $user = $this->aRegisteredUser();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
 
         // When they revoke an id that does not exist (their own id, shifted past the last row)
-        $response = $this->revokeSession($session->plainTextToken, $session->accessToken->getKey() + 1);
+        $response = $this->revokeSession($newAccessToken->plainTextToken, $newAccessToken->accessToken->getKey() + 1);
 
         // Then it is not found
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
@@ -50,16 +50,16 @@ class RevokeSessionTest extends AuthTestCase
     public function when_revoking_a_session_owned_by_another_user_then_it_is_not_found_and_that_session_survives(): void
     {
         // Given two users, each holding an active session
-        $caller = $this->aRegisteredUser();
-        $other = $this->aRegisteredUser('bob@contoso.lk');
-        $callerToken = $this->aSessionFor($caller)->plainTextToken;
-        $foreign = $this->aSessionFor($other, 'mobile');
+        $user = $this->aRegisteredUser();
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
+        $callerToken = $this->aSessionFor($user)->plainTextToken;
+        $foreignNewAccessToken = $this->aSessionFor($otherUser, 'mobile');
 
         // When the caller tries to revoke the other user's session
-        $response = $this->revokeSession($callerToken, $foreign->accessToken->getKey());
+        $response = $this->revokeSession($callerToken, $foreignNewAccessToken->accessToken->getKey());
 
         // Then it is not found and the other user's session is untouched
-        $this->assertSessionRefusedAndIntact($response, $foreign);
+        $this->assertSessionRefusedAndIntact($response, $foreignNewAccessToken);
     }
 
     // Sad — a malformed token id (digits with trailing non-digits) must not coerce onto a real
@@ -70,13 +70,13 @@ class RevokeSessionTest extends AuthTestCase
     {
         // Given a user holding one active session
         $user = $this->aRegisteredUser();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
 
         // When they revoke a malformed id whose numeric prefix matches their own token id
-        $response = $this->revokeSession($session->plainTextToken, $session->accessToken->getKey().'abc');
+        $response = $this->revokeSession($newAccessToken->plainTextToken, $newAccessToken->accessToken->getKey().'abc');
 
         // Then it is refused as not-found and their real session is untouched
-        $this->assertSessionRefusedAndIntact($response, $session);
+        $this->assertSessionRefusedAndIntact($response, $newAccessToken);
     }
 
     // Edge — an expired (but unpruned) session is still the user's own row, so revoke deletes it
@@ -88,14 +88,14 @@ class RevokeSessionTest extends AuthTestCase
     {
         // Given a user with an active session (to authenticate) and an expired, unpruned one
         $user = $this->aRegisteredUser();
-        $active = $this->aSessionFor($user);
-        $expired = $this->anExpiredSessionFor($user, 'old-laptop');
+        $activeNewAccessToken = $this->aSessionFor($user);
+        $expiredNewAccessToken = $this->anExpiredSessionFor($user, 'old-laptop');
 
         // When they revoke the expired session by id
-        $response = $this->revokeSession($active->plainTextToken, $expired->accessToken->getKey());
+        $response = $this->revokeSession($activeNewAccessToken->plainTextToken, $expiredNewAccessToken->accessToken->getKey());
 
         // Then it is removed despite being expired — revoke ignores the expiry the list filters on
-        $this->assertSessionRevoked($response, $expired);
+        $this->assertSessionRevoked($response, $expiredNewAccessToken);
     }
 
     // Happy boundary — a user may revoke the very session they are authenticating with: the
@@ -106,13 +106,13 @@ class RevokeSessionTest extends AuthTestCase
     {
         // Given a user holding a single active session
         $user = $this->aRegisteredUser();
-        $session = $this->aSessionFor($user);
+        $newAccessToken = $this->aSessionFor($user);
 
         // When they revoke that same (current) session
-        $response = $this->revokeSession($session->plainTextToken, $session->accessToken->getKey());
+        $response = $this->revokeSession($newAccessToken->plainTextToken, $newAccessToken->accessToken->getKey());
 
         // Then it is gone and no longer authenticates
-        $this->assertSessionRevoked($response, $session);
+        $this->assertSessionRevoked($response, $newAccessToken);
     }
 
     // Happy — revoking one of the user's other devices removes only that session; the device
@@ -122,14 +122,14 @@ class RevokeSessionTest extends AuthTestCase
     {
         // Given a user with two active sessions: the current one and another device
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
-        $other = $this->aSessionFor($user, 'mobile');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $otherNewAccessToken = $this->aSessionFor($user, 'mobile');
 
         // When they revoke the other device from their current session
-        $response = $this->revokeSession($current->plainTextToken, $other->accessToken->getKey());
+        $response = $this->revokeSession($currentNewAccessToken->plainTextToken, $otherNewAccessToken->accessToken->getKey());
 
         // Then only that session is gone — the current session still authenticates
-        $this->assertOnlyTargetSessionRevoked($response, $other, $current->plainTextToken);
+        $this->assertOnlyTargetSessionRevoked($response, $otherNewAccessToken, $currentNewAccessToken->plainTextToken);
     }
 
     protected function revokeSession(string $token, int|string $tokenId): TestResponse
@@ -142,31 +142,31 @@ class RevokeSessionTest extends AuthTestCase
      * proving the revoke never reached it. Used for both another user's token and a malformed
      * id that must not coerce onto one of the caller's own sessions.
      */
-    protected function assertSessionRefusedAndIntact(TestResponse $response, NewAccessToken $session): void
+    protected function assertSessionRefusedAndIntact(TestResponse $response, NewAccessToken $newAccessToken): void
     {
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
-        $this->assertDatabaseHas('personal_access_tokens', ['id' => $session->accessToken->getKey()]);
-        $this->probeWith($session->plainTextToken)->assertOk();
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $newAccessToken->accessToken->getKey()]);
+        $this->probeWith($newAccessToken->plainTextToken)->assertOk();
     }
 
     /**
      * The revoked session succeeds with no content, its row is gone, and the token no longer
      * authenticates (forgetGuards forces a fresh DB re-check).
      */
-    protected function assertSessionRevoked(TestResponse $response, NewAccessToken $session): void
+    protected function assertSessionRevoked(TestResponse $response, NewAccessToken $newAccessToken): void
     {
         $response->assertNoContent();
-        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $session->accessToken->getKey()]);
-        $this->assertUnauthenticated($this->probeWith($session->plainTextToken));
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $newAccessToken->accessToken->getKey()]);
+        $this->assertUnauthenticated($this->probeWith($newAccessToken->plainTextToken));
     }
 
     /**
      * Only the targeted session is revoked: it succeeds and is dead, while the survivor token
      * still authenticates.
      */
-    protected function assertOnlyTargetSessionRevoked(TestResponse $response, NewAccessToken $target, string $survivorToken): void
+    protected function assertOnlyTargetSessionRevoked(TestResponse $response, NewAccessToken $targetNewAccessToken, string $survivorToken): void
     {
-        $this->assertSessionRevoked($response, $target);
+        $this->assertSessionRevoked($response, $targetNewAccessToken);
         $this->probeWith($survivorToken)->assertOk();
     }
 }

@@ -57,11 +57,11 @@ class ChangePasswordTest extends AuthTestCase
         // Given a member of two companies signed in on two devices — the current one plus one other
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
 
         // When they submit the wrong current password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => 'not-my-password',
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -78,10 +78,10 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
 
         // When they submit a new password identical to their current one
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::LOGIN_PASSWORD,
         ]);
@@ -96,10 +96,10 @@ class ChangePasswordTest extends AuthTestCase
     public function when_the_new_password_is_invalid_then_it_is_rejected(array $payload, string $invalidField, string $expectedMessage): void
     {
         // Given an authenticated user
-        $current = $this->aSessionFor($this->aRegisteredUser());
+        $currentNewAccessToken = $this->aSessionFor($this->aRegisteredUser());
 
         // When they submit a change payload that breaks a field rule
-        $response = $this->changePassword($current->plainTextToken, $payload);
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, $payload);
 
         // Then the request is rejected as a validation error naming the offending field
         $this->assertValidationRejected($response, $invalidField, $expectedMessage);
@@ -110,13 +110,13 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user on two devices and a confirmation reactor that fails at delivery time
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
-        $other = $this->aSessionFor($user, 'mobile');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $otherNewAccessToken = $this->aSessionFor($user, 'mobile');
         Queue::fake();
         $this->bindThrowingPasswordChangedReactor();
 
         // When they change their password and the deferred confirmation is drained
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -125,12 +125,12 @@ class ChangePasswordTest extends AuthTestCase
         try {
             $this->runQueuedHandlersFor(UserPasswordChanged::class);
             $this->fail('Draining the queued reactor should surface the induced failure.');
-        } catch (AssertionFailedError $guard) {
-            throw $guard;
-        } catch (RuntimeException $failure) {
+        } catch (AssertionFailedError $assertionFailedError) {
+            throw $assertionFailedError;
+        } catch (RuntimeException $runtimeException) {
             // Then the committed change and the revocation of the other device survived the delivery failure
-            $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
-            $this->assertChangeSurvivedReactorFailure($user, $failure);
+            $this->assertOtherSessionsRevoked($response, $currentNewAccessToken->plainTextToken, $otherNewAccessToken->plainTextToken);
+            $this->assertChangeSurvivedReactorFailure($user, $runtimeException);
         }
     }
 
@@ -139,12 +139,12 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user on two devices and a users projection that fails mid-change
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->induceProjectorFailureFor(UserPasswordChanged::class);
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -158,12 +158,12 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user on two devices and a session revocation that fails
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->bindThrowingTokenRevoker();
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -178,12 +178,12 @@ class ChangePasswordTest extends AuthTestCase
         // Given a member on two devices, and an audit trail that refuses the next row
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->failTheAuditTrail();
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -200,17 +200,17 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user signed in on two devices — the current one plus one other
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
-        $other = $this->aSessionFor($user, 'mobile');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $otherNewAccessToken = $this->aSessionFor($user, 'mobile');
 
         // When they change their password from the current device with the correct current password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
 
         // Then the change succeeds, the other device no longer authenticates, and the current session survives
-        $this->assertOtherSessionsRevoked($response, $current->plainTextToken, $other->plainTextToken);
+        $this->assertOtherSessionsRevoked($response, $currentNewAccessToken->plainTextToken, $otherNewAccessToken->plainTextToken);
         $this->assertSame(1, $user->tokens()->count(), 'Only the current session must remain after a change.');
     }
 
@@ -234,10 +234,10 @@ class ChangePasswordTest extends AuthTestCase
     public function when_no_idempotency_key_is_supplied_then_the_change_is_refused(): void
     {
         // Given an authenticated user submitting an otherwise-valid change
-        $current = $this->aSessionFor($this->aRegisteredUser());
+        $currentNewAccessToken = $this->aSessionFor($this->aRegisteredUser());
 
         // When the request carries no Idempotency-Key header
-        $response = $this->withToken($current->plainTextToken)->putJson('/api/v1/me/password', [
+        $response = $this->withToken($currentNewAccessToken->plainTextToken)->putJson('/api/v1/me/password', [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -251,14 +251,14 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given a user who has already changed their password under a fixed idempotency key (one other session)
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $key = (string) Str::uuid();
         $payload = ['currentPassword' => self::LOGIN_PASSWORD, 'newPassword' => self::NEW_PASSWORD];
-        $this->changePassword($current->plainTextToken, $payload, $key)->assertNoContent();
+        $this->changePassword($currentNewAccessToken->plainTextToken, $payload, $key)->assertNoContent();
 
         // When the identical request is retried with the SAME key (a client retry of the 204)
-        $response = $this->changePassword($current->plainTextToken, $payload, $key);
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, $payload, $key);
 
         // Then the cached 204 is replayed, NOT re-executed — a re-run would now reject the stale
         // current password (401) and revoke a second time; replay leaves both unchanged
@@ -274,10 +274,10 @@ class ChangePasswordTest extends AuthTestCase
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
         $this->softDeleteMembership($this->employingCompany, $user);
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
 
         // When they change their password
-        $this->changePassword($current->plainTextToken, [
+        $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -293,11 +293,11 @@ class ChangePasswordTest extends AuthTestCase
         // Given a member whose client sends oversized device and correlation headers
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
         $this->withHeaders(['User-Agent' => str_repeat('a', 300), 'Correlation-Id' => str_repeat('b', 300)]);
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -314,10 +314,10 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given a user with no company
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -334,10 +334,10 @@ class ChangePasswordTest extends AuthTestCase
     {
         // Given an authenticated user
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
 
         // When they change their password with the correct current password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -354,11 +354,11 @@ class ChangePasswordTest extends AuthTestCase
         // Given a user who owns one company and works for another, signed in from a known device
         $user = $this->aRegisteredUser();
         $this->inTwoCompanies($user);
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
         $this->fromADevice();
 
         // When they change their password
-        $response = $this->changePassword($current->plainTextToken, [
+        $response = $this->changePassword($currentNewAccessToken->plainTextToken, [
             'currentPassword' => self::LOGIN_PASSWORD,
             'newPassword' => self::NEW_PASSWORD,
         ]);
@@ -388,9 +388,9 @@ class ChangePasswordTest extends AuthTestCase
      */
     protected function assertPasswordUnchanged(User $user, int $expectedSessions): void
     {
-        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
-        $this->assertTrue(Hash::check(self::LOGIN_PASSWORD, $stored->password), 'The original password must still authenticate.');
-        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertTrue(Hash::check(self::LOGIN_PASSWORD, $user->password), 'The original password must still authenticate.');
+        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $user->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected change must revoke no sessions.');
     }
 
@@ -411,9 +411,9 @@ class ChangePasswordTest extends AuthTestCase
      * failure (not some other error) and the NEW password authenticates — the reactor failed AFTER
      * the committed write, never in its place.
      */
-    protected function assertChangeSurvivedReactorFailure(User $user, RuntimeException $failure): void
+    protected function assertChangeSurvivedReactorFailure(User $user, RuntimeException $runtimeException): void
     {
-        $this->assertSame('Induced delivery-time reactor failure.', $failure->getMessage());
+        $this->assertSame('Induced delivery-time reactor failure.', $runtimeException->getMessage());
         $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
     }
 
@@ -425,9 +425,9 @@ class ChangePasswordTest extends AuthTestCase
      */
     protected function assertPasswordChangeWasEventSourced(string $newPassword): void
     {
-        $stored = LesilyStoredEvent::query()->where('event_class', UserPasswordChanged::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserPasswordChanged::class)->sole();
         $this->assertTrue(
-            Hash::check($newPassword, $stored->event_properties['passwordHash']),
+            Hash::check($newPassword, $eloquentStoredEvent->event_properties['passwordHash']),
             'The stored UserPasswordChanged must carry the new password hash (event-sourced write, not a direct save).',
         );
     }

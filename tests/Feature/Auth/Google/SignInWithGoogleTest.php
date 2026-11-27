@@ -28,21 +28,21 @@ class SignInWithGoogleTest extends AuthTestCase
 {
     protected const DAVES_RECOVERY_CODE = 'dave-recovery-1';
 
-    protected User $alice;
+    protected User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         config(['app.debug' => false]);
-        $this->alice = User::factory()->withEmail(self::LOGIN_EMAIL)->linkedToGoogle(self::GOOGLE_SUBJECT)->create();
+        $this->user = User::factory()->withEmail(self::LOGIN_EMAIL)->linkedToGoogle(self::GOOGLE_SUBJECT)->create();
     }
 
     #[Test]
     public function when_the_google_token_is_invalid_then_sign_in_is_refused_and_nothing_changes(): void
     {
         // Given Alice linked to Google on a Starter company, and a Google token that fails verification
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(null);
 
         // When a Google sign-in arrives with that token
@@ -50,9 +50,9 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then it is refused, nothing is signed in, and the failure is logged
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
-        $this->assertNothingSignedIn($this->alice);
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::InvalidGoogleToken, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
+        $this->assertNothingSignedIn($this->user);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::InvalidGoogleToken, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
     }
 
     /** @param  array<string, mixed>  $payload */
@@ -101,8 +101,8 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertIsString($googleName);
         $this->assertSame(['nimal@gmail.com', 'Nimal Silva'], [$googleEmail, $googleName]);
         $this->assertSame($users, User::query()->count());
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::GoogleAccountNotRegistered);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::UnknownAccount, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_NOT_FOUND, ApiErrorCode::GoogleAccountNotRegistered);
     }
 
     #[Test]
@@ -110,7 +110,7 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_google_has_not_verified_the_email_then_no_account_is_matched_by_it(string $email): void
     {
         // Given Carol, verified and not linked, and a Google account Google has not verified for the email
-        $carol = $this->aVerifiedUnlinkedStarterUser();
+        $otherUser = $this->aVerifiedUnlinkedStarterUser();
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('a-new-subject', $email, false, 'Someone'));
         $users = User::query()->count();
 
@@ -121,7 +121,7 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::EmailNotVerified);
         $response->assertJsonPath('message', 'Verify your email, or sign in with your password.');
         $response->assertJsonMissingPath('google_email');
-        $this->assertNothingSignedIn($carol);
+        $this->assertNothingSignedIn($otherUser);
         $this->assertSame($users, User::query()->count());
         $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, null);
     }
@@ -130,7 +130,7 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_the_account_is_linked_to_a_different_google_account_then_sign_in_is_refused(): void
     {
         // Given Alice linked to one Google account, on a Starter company, and a token from another Google account with her email
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('another-google-subject', self::LOGIN_EMAIL, true, 'Alice Perera'));
 
         // When a Google sign-in arrives with that token
@@ -139,16 +139,16 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then it is refused, Alice keeps her own link, and the mismatch is logged
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAlreadyLinked);
         $response->assertJsonPath('message', 'This account is linked to a different Google account. Sign in with your password.');
-        $this->assertNothingSignedIn($this->alice);
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleAccountMismatch, $this->alice);
+        $this->assertNothingSignedIn($this->user);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleAccountMismatch, $this->user);
     }
 
     #[Test]
     public function when_the_account_unlinked_google_then_a_google_sign_in_is_refused(): void
     {
         // Given Erin, who unlinked Google, on a Free company only, and her verified Google account
-        $erin = User::factory()->withEmail('erin@contoso.lk')->unlinkedFromGoogle()->create();
-        $this->memberOfCompanyOnPlan($erin, BillingPlan::Free);
+        $otherUser = User::factory()->withEmail('erin@contoso.lk')->unlinkedFromGoogle()->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Free);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('erins-google-subject', 'erin@contoso.lk', true, 'Erin'));
 
         // When a Google sign-in arrives with that token
@@ -157,9 +157,9 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then the unlink answers before the plan, nothing is linked, and the refusal is logged
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
         $response->assertJsonPath('message', 'Google sign-in is off for this account. Sign in with your password, then link Google from your profile.');
-        $this->assertNothingSignedIn($erin);
-        $entry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $erin);
-        $this->assertAnsweredAs($entry, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
+        $this->assertNothingSignedIn($otherUser);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $otherUser);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
     }
 
     #[Test]
@@ -167,7 +167,7 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_no_company_can_use_google_sign_in_then_sign_in_is_refused_with_the_upgrade_plan(string $memberships): void
     {
         // Given Alice linked to Google with no live company whose plan grants Google sign-in
-        $this->withoutGoogleSignIn($this->alice, $memberships);
+        $this->withoutGoogleSignIn($this->user, $memberships);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When Alice signs in with Google
@@ -176,16 +176,16 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then the upgrade refusal names Starter, nothing is signed in, and the refusal is logged
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
         $response->assertJsonPath('upgrade_to', 'Starter');
-        $this->assertNothingSignedIn($this->alice);
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::PlanNotEligible, $this->alice);
+        $this->assertNothingSignedIn($this->user);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::PlanNotEligible, $this->user);
     }
 
     #[Test]
     public function when_the_lesily_email_is_unverified_then_the_first_google_sign_in_is_refused_and_nothing_is_linked(): void
     {
         // Given Bob, not linked to Google, with an unverified Lesily email on a Starter company
-        $bob = User::factory()->withEmail('bob@contoso.lk')->unverified()->create();
-        $this->memberOfCompanyOnPlan($bob, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('bob@contoso.lk')->unverified()->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('bobs-google-subject', 'bob@contoso.lk', true, 'Bob'));
 
         // When Bob signs in with a Google account for that email
@@ -193,16 +193,16 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then it is refused, nothing is linked, and the refusal is logged
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::EmailNotVerified);
-        $this->assertNothingSignedIn($bob);
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, $bob);
+        $this->assertNothingSignedIn($otherUser);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, $otherUser);
     }
 
     #[Test]
     public function when_an_unverified_two_factor_user_signs_in_with_google_then_it_is_refused_before_any_challenge(): void
     {
         // Given Frank, enrolled in 2FA, not linked, with an unverified Lesily email on a Starter company
-        $frank = User::factory()->withEmail('frank@contoso.lk')->unverified()->withTwoFactor()->create();
-        $this->memberOfCompanyOnPlan($frank, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('frank@contoso.lk')->unverified()->withTwoFactor()->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('franks-google-subject', 'frank@contoso.lk', true, 'Frank'));
 
         // When Frank signs in with a Google account for that email
@@ -211,25 +211,25 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then it is refused before a challenge is opened, so no second factor can complete a link
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::EmailNotVerified);
         $response->assertJsonMissingPath('data.challenge_id');
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, $frank);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::EmailNotVerified, $otherUser);
     }
 
     #[Test]
     public function when_the_user_is_at_the_device_limit_then_no_session_is_issued(): void
     {
         // Given Alice linked to Google on a Pro company, already signed in on three devices
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Pro);
-        $this->aSessionFor($this->alice);
-        $this->aSessionFor($this->alice);
-        $this->aSessionFor($this->alice);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Pro);
+        $this->aSessionFor($this->user);
+        $this->aSessionFor($this->user);
+        $this->aSessionFor($this->user);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When Alice signs in with Google on a fourth device
         $response = $this->signInWithGoogle();
 
         // Then the device cap refuses it and the refusal is logged
-        $this->assertDeviceLimitRejected($response, $this->alice, 3);
-        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $this->alice);
+        $this->assertDeviceLimitRejected($response, $this->user, 3);
+        $this->assertAccessLogged(AccessEvent::LoginFailed, AccessEventReason::DeviceLimit, $this->user);
     }
 
     #[Test]
@@ -254,7 +254,7 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_a_two_factor_challenge_is_abandoned_then_nothing_is_linked(): void
     {
         // Given Dave, enrolled in 2FA and not linked, whose first Google sign-in challenge has expired
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
         $this->travel(LoginChallengeStore::TTL_MINUTES + 1)->minutes();
         $this->fakeTotpVerifier(true);
@@ -264,31 +264,31 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then the verify is refused and Google is never linked
         $this->assertRefusedWith($response, Response::HTTP_NOT_FOUND, ApiErrorCode::TwoFactorChallengeNotFound);
-        $this->assertNull($dave->fresh()?->google_id);
+        $this->assertNull($otherUser->fresh()?->google_id);
     }
 
     #[Test]
     public function when_google_is_unlinked_during_a_two_factor_challenge_then_the_second_factor_links_nothing(): void
     {
         // Given Dave, enrolled in 2FA, whose first Google sign-in challenge is open while Google is linked and unlinked from his profile
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
-        UserAggregate::retrieve($dave->getKey())->linkGoogleOAuth('daves-google-subject')->persist();
-        UserAggregate::retrieve($dave->getKey())->unlinkGoogleOAuth()->persist();
+        UserAggregate::retrieve($otherUser->getKey())->linkGoogleOAuth('daves-google-subject')->persist();
+        UserAggregate::retrieve($otherUser->getKey())->unlinkGoogleOAuth()->persist();
         $this->fakeTotpVerifier(true);
 
         // When the second factor arrives
         $response = $this->verify($challengeId, '123456');
 
         // Then the pending link is refused before the factor is spent: no session, no second link, and the refusal is logged
-        $this->assertPendingLinkRefused($response, $dave, $challengeId);
+        $this->assertPendingLinkRefused($response, $otherUser, $challengeId);
     }
 
     #[Test]
     public function when_the_session_cannot_be_issued_then_the_first_link_is_not_recorded(): void
     {
         // Given Carol, verified and not linked, on a Starter company, and a session mint that fails
-        $carol = $this->aVerifiedUnlinkedStarterUser();
+        $otherUser = $this->aVerifiedUnlinkedStarterUser();
         $this->bindThrowingSessionIssuer();
 
         // When Carol signs in with Google for the first time
@@ -296,7 +296,7 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then the sign-in fails and the link is not recorded either
         $response->assertInternalServerError();
-        $this->assertNull($carol->fresh()?->google_id);
+        $this->assertNull($otherUser->fresh()?->google_id);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
@@ -304,7 +304,7 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_the_session_cannot_be_issued_at_the_second_factor_then_the_first_link_is_not_recorded(): void
     {
         // Given Dave challenged by a first Google sign-in, and a session mint that fails
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
         $this->fakeTotpVerifier(true);
         $this->bindThrowingSessionIssuer();
@@ -314,7 +314,7 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then the sign-in fails and the link is not recorded either
         $response->assertInternalServerError();
-        $this->assertNull($dave->fresh()?->google_id);
+        $this->assertNull($otherUser->fresh()?->google_id);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
@@ -322,36 +322,36 @@ class SignInWithGoogleTest extends AuthTestCase
     public function when_a_google_linked_user_with_an_unverified_email_signs_in_then_a_session_is_issued(): void
     {
         // Given Bob linked to Google with an unverified Lesily email, on a Starter company
-        $bob = User::factory()->withEmail('bob@contoso.lk')->unverified()->linkedToGoogle('bobs-google-subject')->create();
-        $this->memberOfCompanyOnPlan($bob, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('bob@contoso.lk')->unverified()->linkedToGoogle('bobs-google-subject')->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('bobs-google-subject', 'bob@contoso.lk', true, 'Bob'));
 
         // When Bob signs in with that Google account
         $response = $this->signInWithGoogle();
 
         // Then a session is issued: the email check guards a first link, not a linked account
-        $this->assertSignedInWithoutLink($response, $bob);
+        $this->assertSignedInWithoutLink($response, $otherUser);
     }
 
     #[Test]
     public function when_a_linked_users_token_carries_an_email_google_has_not_verified_then_a_session_is_issued(): void
     {
         // Given Alice linked to Google on a Starter company, whose token says Google has not verified the email
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL, false));
 
         // When Alice signs in with Google
         $response = $this->signInWithGoogle();
 
         // Then a session is issued: the account is matched by its Google id, not by the email
-        $this->assertSignedInWithoutLink($response, $this->alice);
+        $this->assertSignedInWithoutLink($response, $this->user);
     }
 
     #[Test]
     public function when_no_device_name_is_sent_then_the_session_is_named_by_the_fallback(): void
     {
         // Given Alice linked to Google on a Starter company, signing in from a client with no user agent
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When the sign-in names no device
@@ -359,7 +359,7 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then the session is issued under the fallback device name
         $response->assertOk();
-        $this->assertTokenNamed($this->alice, 'Unknown device');
+        $this->assertTokenNamed($this->user, 'Unknown device');
     }
 
     #[Test]
@@ -367,7 +367,7 @@ class SignInWithGoogleTest extends AuthTestCase
     {
         // Given Dave challenged by a first Google sign-in, who has already entered a wrong code
         $this->freezeTime();
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
         $this->fakeTotpVerifier(false);
         $this->verify($challengeId, '000000');
@@ -378,15 +378,15 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then he is signed in and Google is linked with that session
         $response->assertOk();
-        $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+        $this->assertGoogleLinkedWith($otherUser, 'daves-google-subject');
     }
 
     #[Test]
     public function when_a_user_who_unlinked_google_passes_a_password_sign_in_challenge_then_a_session_is_issued(): void
     {
         // Given Frank, enrolled in 2FA, who unlinked Google, with a password sign-in challenge open
-        $frank = User::factory()->withEmail('frank@contoso.lk')->withTwoFactor()->unlinkedFromGoogle()->create();
-        $challengeId = $this->openChallenge($frank);
+        $otherUser = User::factory()->withEmail('frank@contoso.lk')->withTwoFactor()->unlinkedFromGoogle()->create();
+        $challengeId = $this->openChallenge($otherUser);
         $this->fakeTotpVerifier(true);
 
         // When the second factor arrives
@@ -394,15 +394,15 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then the unlink never blocks a password sign-in
         $response->assertOk();
-        $this->assertSame(1, $frank->tokens()->count());
+        $this->assertSame(1, $otherUser->tokens()->count());
     }
 
     #[Test]
     public function when_an_already_linked_two_factor_user_passes_the_challenge_then_no_second_link_is_recorded(): void
     {
         // Given Erin, linked to Google and enrolled in 2FA, challenged by a Google sign-in
-        $erin = User::factory()->withEmail('erin@contoso.lk')->withTwoFactor()->linkedToGoogle('erins-google-subject')->create();
-        $this->memberOfCompanyOnPlan($erin, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('erin@contoso.lk')->withTwoFactor()->linkedToGoogle('erins-google-subject')->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('erins-google-subject', 'erin@contoso.lk', true, 'Erin'));
         $challengeId = $this->aGoogleChallenge();
         $this->fakeTotpVerifier(true);
@@ -420,31 +420,31 @@ class SignInWithGoogleTest extends AuthTestCase
     {
         // Given Alice linked to Google on a Starter company, holding a valid token for that account
         $this->freezeTime();
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When Alice signs in with Google
         $response = $this->signInWithGoogle();
 
         // Then a session is issued, her last sign-in is stamped and the success is logged
-        $this->assertSignedInWithoutLink($response, $this->alice);
-        $this->assertLastLoggedAtStamped($this->alice);
-        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $this->alice);
+        $this->assertSignedInWithoutLink($response, $this->user);
+        $this->assertLastLoggedAtStamped($this->user);
+        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $this->user);
     }
 
     #[Test]
     public function when_one_company_among_free_ones_can_use_google_sign_in_then_sign_in_succeeds(): void
     {
         // Given Alice linked to Google, a member of a Free company and of a Starter company
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Free);
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Free);
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor(self::LOGIN_EMAIL));
 
         // When Alice signs in with Google
         $response = $this->signInWithGoogle();
 
         // Then a session is issued: one Starter company is enough
-        $this->assertSignedInWithoutLink($response, $this->alice);
+        $this->assertSignedInWithoutLink($response, $this->user);
     }
 
     #[Test]
@@ -453,24 +453,24 @@ class SignInWithGoogleTest extends AuthTestCase
         // Given Carol, verified and not linked, on a Starter company, holding her own verified Google account
         $this->freezeTime();
         Notification::fake();
-        $carol = $this->aVerifiedUnlinkedStarterUser();
+        $otherUser = $this->aVerifiedUnlinkedStarterUser();
 
         // When Carol signs in with Google for the first time
         $response = $this->signInWithGoogle();
 
         // Then a session is issued, Google is linked with it, Carol is told, and the success is logged
         $response->assertOk();
-        $this->assertTokenNamed($carol, 'Pixel 8');
-        $this->assertGoogleLinkedWith($carol, 'carols-google-subject');
-        Notification::assertSentTo($carol, SystemNotification::class, fn (SystemNotification $notification): bool => $notification->type === NotificationType::GoogleAccountLinked);
-        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $carol);
+        $this->assertTokenNamed($otherUser, 'Pixel 8');
+        $this->assertGoogleLinkedWith($otherUser, 'carols-google-subject');
+        Notification::assertSentTo($otherUser, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::GoogleAccountLinked);
+        $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $otherUser);
     }
 
     #[Test]
     public function when_a_two_factor_user_signs_in_with_google_then_a_challenge_is_issued_and_nothing_is_linked_yet(): void
     {
         // Given Dave, enrolled in 2FA and not linked, on a Starter company
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
 
         // When Dave signs in with Google for the first time
         $response = $this->signInWithGoogle();
@@ -478,8 +478,8 @@ class SignInWithGoogleTest extends AuthTestCase
         // Then the login challenge is returned, nothing is linked yet, and the challenge is logged
         $response->assertAccepted();
         $this->assertIsString($response->json('data.challenge_id'));
-        $this->assertNothingSignedIn($dave);
-        $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $dave);
+        $this->assertNothingSignedIn($otherUser);
+        $this->assertAccessLogged(AccessEvent::LoginChallenged, null, $otherUser);
     }
 
     #[Test]
@@ -487,7 +487,7 @@ class SignInWithGoogleTest extends AuthTestCase
     {
         // Given Dave challenged by a first Google sign-in
         $this->freezeTime();
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
         $this->fakeTotpVerifier(true);
 
@@ -496,8 +496,8 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then he is signed in and Google is linked with that session
         $response->assertOk();
-        $this->assertSame(1, $dave->tokens()->count());
-        $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+        $this->assertSame(1, $otherUser->tokens()->count());
+        $this->assertGoogleLinkedWith($otherUser, 'daves-google-subject');
     }
 
     #[Test]
@@ -505,7 +505,7 @@ class SignInWithGoogleTest extends AuthTestCase
     {
         // Given Dave challenged by a first Google sign-in, holding one of his recovery codes
         $this->freezeTime();
-        $dave = $this->aTwoFactorUnlinkedStarterUser();
+        $otherUser = $this->aTwoFactorUnlinkedStarterUser();
         $challengeId = $this->aGoogleChallenge();
         $this->fakeTotpVerifier(false);
 
@@ -514,8 +514,8 @@ class SignInWithGoogleTest extends AuthTestCase
 
         // Then he is signed in and Google is linked with that session
         $response->assertOk();
-        $this->assertSame(1, $dave->tokens()->count());
-        $this->assertGoogleLinkedWith($dave, 'daves-google-subject');
+        $this->assertSame(1, $otherUser->tokens()->count());
+        $this->assertGoogleLinkedWith($otherUser, 'daves-google-subject');
     }
 
     /** @return array<string, array{string}> */
@@ -536,9 +536,9 @@ class SignInWithGoogleTest extends AuthTestCase
         $this->assertSame(1, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
         $this->assertNotNull(app(LoginChallengeStore::class)->find($challengeId), 'The refusal must spend no factor.');
 
-        $failed = AccessLogEntry::query()->where('event', AccessEvent::LoginFailed)->sole();
-        $this->assertSame([AccessEventReason::GoogleUnlinked, $user->getKey()], [$failed->reason, $failed->user_id]);
-        $this->assertAnsweredAs($failed, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
+        $accessLogEntry = AccessLogEntry::query()->where('event', AccessEvent::LoginFailed)->sole();
+        $this->assertSame([AccessEventReason::GoogleUnlinked, $user->getKey()], [$accessLogEntry->reason, $accessLogEntry->user_id]);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_CONFLICT, ApiErrorCode::GoogleSignInUnlinked);
     }
 
     protected function aGoogleChallenge(): string
@@ -548,19 +548,19 @@ class SignInWithGoogleTest extends AuthTestCase
 
     protected function aTwoFactorUnlinkedStarterUser(): User
     {
-        $dave = User::factory()->withEmail('dave@contoso.lk')->withTwoFactor([self::DAVES_RECOVERY_CODE])->create();
-        $this->memberOfCompanyOnPlan($dave, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('dave@contoso.lk')->withTwoFactor([self::DAVES_RECOVERY_CODE])->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('daves-google-subject', 'dave@contoso.lk', true, 'Dave'));
 
-        return $dave;
+        return $otherUser;
     }
 
     protected function aVerifiedUnlinkedStarterUser(): User
     {
-        $carol = User::factory()->withEmail('carol@contoso.lk')->create();
-        $this->memberOfCompanyOnPlan($carol, BillingPlan::Starter);
+        $otherUser = User::factory()->withEmail('carol@contoso.lk')->create();
+        $this->memberOfCompanyOnPlan($otherUser, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier(new GoogleIdentity('carols-google-subject', 'carol@contoso.lk', true, 'Carol'));
 
-        return $carol;
+        return $otherUser;
     }
 }

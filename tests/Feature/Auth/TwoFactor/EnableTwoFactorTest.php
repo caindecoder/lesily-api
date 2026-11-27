@@ -52,10 +52,10 @@ class EnableTwoFactorTest extends AuthTestCase
 
     #[Test]
     #[DataProvider('provideSubProPlans')]
-    public function when_a_sub_pro_user_starts_enrollment_then_two_factor_is_unavailable(BillingPlan $plan): void
+    public function when_a_sub_pro_user_starts_enrollment_then_two_factor_is_unavailable(BillingPlan $billingPlan): void
     {
         // Given (a member of a company whose plan does not grant 2FA)
-        $this->putOnPlan($this->company, $plan);
+        $this->putOnPlan($this->company, $billingPlan);
 
         // When the member starts 2FA enrollment
         $response = $this->enable($this->member, $this->company);
@@ -359,8 +359,8 @@ class EnableTwoFactorTest extends AuthTestCase
     protected function assertTwoFactorEnabled(TestResponse $response, User $user, string $stagedSecret): void
     {
         $response->assertOk();
-        $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
-        $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertNotNull($user->two_factor_confirmed_at, '2FA must be marked enabled at confirm.');
         $this->assertNotEmpty($response->json('data.recovery_codes'), 'Recovery codes are shown once at confirm.');
         $this->assertNull(Cache::get("2fa-setup:{$user->getKey()}"), 'The staged secret is cleared once confirmed.');
         $this->assertSecretStoredEncrypted($user, $stagedSecret);
@@ -412,8 +412,8 @@ class EnableTwoFactorTest extends AuthTestCase
 
     protected function assertEnableMarkerCarriesNoSecret(string $stagedSecret): void
     {
-        $marker = LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->sole();
-        $properties = $marker->event_properties;
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', User2FAEnabled::class)->sole();
+        $properties = $eloquentStoredEvent->event_properties;
         $this->assertSame(['userId', 'confirmedAt'], array_keys($properties), 'The marker must carry only non-secret metadata.');
         $this->assertStringNotContainsString($stagedSecret, (string) json_encode($properties), 'The TOTP secret must never enter the event store.');
     }

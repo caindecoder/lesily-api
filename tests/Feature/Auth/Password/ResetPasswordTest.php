@@ -119,21 +119,21 @@ class ResetPasswordTest extends AuthTestCase
     public function when_the_email_does_not_match_the_token_then_the_reset_is_refused(): void
     {
         // Given a token issued for Alice and a second account, Bob
-        $alice = $this->aRegisteredUser();
-        $bob = $this->aRegisteredUser('bob@contoso.lk');
-        $aliceToken = $this->aResetTokenFor($alice);
+        $user = $this->aRegisteredUser();
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
+        $aliceToken = $this->aResetTokenFor($user);
 
         // When Alice's token is submitted with Bob's email
         $response = $this->resetPassword([
             'token' => $aliceToken,
-            'email' => $bob->email,
+            'email' => $otherUser->email,
             'password' => self::NEW_PASSWORD,
         ]);
 
         // Then the reset is refused and neither account's password changes (a token is bound to its email)
         $this->assertRefusedWith($response, Response::HTTP_UNPROCESSABLE_ENTITY, ApiErrorCode::ResetLinkInvalid);
-        $this->assertResetRefused($alice, self::LOGIN_PASSWORD, 0);
-        $this->assertResetRefused($bob, self::LOGIN_PASSWORD, 0);
+        $this->assertResetRefused($user, self::LOGIN_PASSWORD, 0);
+        $this->assertResetRefused($otherUser, self::LOGIN_PASSWORD, 0);
     }
 
     #[Test]
@@ -141,8 +141,8 @@ class ResetPasswordTest extends AuthTestCase
     {
         // Given a user on two devices with a valid reset token and a confirmation reactor that fails at delivery time
         $user = $this->aRegisteredUser();
-        $web = $this->aSessionFor($user, 'web');
-        $mobile = $this->aSessionFor($user, 'mobile');
+        $webNewAccessToken = $this->aSessionFor($user, 'web');
+        $mobileNewAccessToken = $this->aSessionFor($user, 'mobile');
         $token = $this->aResetTokenFor($user);
         Queue::fake();
         $this->bindThrowingPasswordChangedReactor();
@@ -158,13 +158,13 @@ class ResetPasswordTest extends AuthTestCase
         try {
             $this->runQueuedHandlersFor(UserPasswordReset::class);
             $this->fail('Draining the queued reactor should surface the induced failure.');
-        } catch (AssertionFailedError $guard) {
-            throw $guard;
-        } catch (RuntimeException $failure) {
+        } catch (AssertionFailedError $assertionFailedError) {
+            throw $assertionFailedError;
+        } catch (RuntimeException $runtimeException) {
             // Then the committed reset, the revocation of every session and the token consumption
             // survived the delivery failure
-            $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
-            $this->assertResetSurvivedReactorFailure($user, $failure);
+            $this->assertAllSessionsRevoked($response, $user, [$webNewAccessToken->plainTextToken, $mobileNewAccessToken->plainTextToken]);
+            $this->assertResetSurvivedReactorFailure($user, $runtimeException);
         }
     }
 
@@ -271,8 +271,8 @@ class ResetPasswordTest extends AuthTestCase
     {
         // Given a registered user signed in on two devices, with a valid reset token
         $user = $this->aRegisteredUser();
-        $web = $this->aSessionFor($user, 'web');
-        $mobile = $this->aSessionFor($user, 'mobile');
+        $webNewAccessToken = $this->aSessionFor($user, 'web');
+        $mobileNewAccessToken = $this->aSessionFor($user, 'mobile');
         $token = $this->aResetTokenFor($user);
 
         // When they reset their password
@@ -283,7 +283,7 @@ class ResetPasswordTest extends AuthTestCase
         ]);
 
         // Then the reset succeeds and every one of their sessions is revoked (they re-log in with the new pw)
-        $this->assertAllSessionsRevoked($response, $user, [$web->plainTextToken, $mobile->plainTextToken]);
+        $this->assertAllSessionsRevoked($response, $user, [$webNewAccessToken->plainTextToken, $mobileNewAccessToken->plainTextToken]);
     }
 
     #[Test]
@@ -329,9 +329,9 @@ class ResetPasswordTest extends AuthTestCase
      */
     protected function assertResetRefused(User $user, string $originalPassword, int $expectedSessions): void
     {
-        $stored = User::query()->whereKey($user->getKey())->firstOrFail();
-        $this->assertTrue(Hash::check($originalPassword, $stored->password), 'The original password must still authenticate.');
-        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $stored->password), 'A rejected new password must not be stored.');
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $this->assertTrue(Hash::check($originalPassword, $user->password), 'The original password must still authenticate.');
+        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $user->password), 'A rejected new password must not be stored.');
         $this->assertSame($expectedSessions, $user->tokens()->count(), 'A rejected reset must revoke no sessions.');
     }
 
@@ -356,9 +356,9 @@ class ResetPasswordTest extends AuthTestCase
      */
     protected function assertResetWasEventSourced(string $newPassword): void
     {
-        $stored = LesilyStoredEvent::query()->where('event_class', UserPasswordReset::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserPasswordReset::class)->sole();
         $this->assertTrue(
-            Hash::check($newPassword, $stored->event_properties['passwordHash']),
+            Hash::check($newPassword, $eloquentStoredEvent->event_properties['passwordHash']),
             'The stored UserPasswordReset must carry the new password hash (event-sourced write, not a direct save).',
         );
     }
@@ -385,9 +385,9 @@ class ResetPasswordTest extends AuthTestCase
      * single-use token — the reactor failed AFTER the committed write and the steps that follow it.
      * Call it AFTER any token-count assertion: assertPasswordReplaced logs in and mints a token.
      */
-    protected function assertResetSurvivedReactorFailure(User $user, RuntimeException $failure): void
+    protected function assertResetSurvivedReactorFailure(User $user, RuntimeException $runtimeException): void
     {
-        $this->assertSame('Induced delivery-time reactor failure.', $failure->getMessage());
+        $this->assertSame('Induced delivery-time reactor failure.', $runtimeException->getMessage());
         $this->assertPasswordReplaced($user, self::LOGIN_PASSWORD, self::NEW_PASSWORD);
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
     }
