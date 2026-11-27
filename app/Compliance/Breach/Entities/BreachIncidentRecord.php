@@ -93,36 +93,36 @@ class BreachIncidentRecord extends Model
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $breachIncidents
      */
-    protected function scopeWhereStage(Builder $query, ?BreachStage $stage): void
+    protected function scopeWhereStage(Builder $breachIncidents, ?BreachStage $breachStage): void
     {
-        $query->when($stage !== null, fn (Builder $query) => $query->where('stage', $stage));
+        $breachIncidents->when($breachStage !== null, fn (Builder $builder) => $builder->where('stage', $breachStage));
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $breachIncidents
      */
-    protected function scopeOrderByDeadline(Builder $query): void
+    protected function scopeOrderByDeadline(Builder $breachIncidents): void
     {
-        $query->orderBy('deadline')->orderBy('id');
+        $breachIncidents->orderBy('deadline')->orderBy('id');
     }
 
     /**
-     * @param  Builder<self>  $query
+     * @param  Builder<self>  $breachIncidents
      */
-    protected function scopeWhereDeadlineMissedToFlag(Builder $query, CarbonInterface $at): void
+    protected function scopeWhereDeadlineMissedToFlag(Builder $breachIncidents, CarbonInterface $scannedAt): void
     {
-        $query->where('stage', BreachStage::Recorded)->where('deadline', '<=', $at)->whereNull('deadline_missed_at');
+        $breachIncidents->where('stage', BreachStage::Recorded)->where('deadline', '<=', $scannedAt)->whereNull('deadline_missed_at');
     }
 
     public function totalEstimatedCount(): ?int
     {
-        $known = $this->companies->pluck('estimated_count')->filter(fn (?int $count): bool => $count !== null);
+        $collection = $this->companies->pluck('estimated_count')->filter(fn (?int $count): bool => $count !== null);
         /** @var int $total */
-        $total = $known->sum();
+        $total = $collection->sum();
 
-        return $known->isEmpty() ? null : $total;
+        return $collection->isEmpty() ? null : $total;
     }
 
     protected static function newFactory(): BreachIncidentRecordFactory
