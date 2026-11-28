@@ -11,10 +11,10 @@ use App\Foundation\AuditTrail\UseCases\Interactors\ListAuditTrailInteractor;
 
 class AuditTrailController extends Controller
 {
-    public function index(Request $request, ListAuditTrailInteractor $interactor): JsonResponse
+    public function index(Request $request, ListAuditTrailInteractor $listAuditTrailInteractor): JsonResponse
     {
-        $entries = $interactor->execute(ListAuditTrailCommand::fromQuery($request), $request->company());
+        $auditEntries = $listAuditTrailInteractor->execute(ListAuditTrailCommand::fromQuery($request), $request->company());
 
-        return (new AuditEntryCollection($entries))->response($request);
+        return (new AuditEntryCollection($auditEntries))->response($request);
     }
 }

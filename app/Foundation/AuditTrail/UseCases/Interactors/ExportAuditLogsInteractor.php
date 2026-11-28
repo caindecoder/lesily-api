@@ -18,27 +18,27 @@ class ExportAuditLogsInteractor
 {
     public function __construct(
         protected AuditLogRows $auditLogRows,
-        protected AuditTrailWriter $writer,
+        protected AuditTrailWriter $auditTrailWriter,
         protected MemberRoleCode $memberRoleCode,
     ) {}
 
     /**
      * @return LazyCollection<int, stdClass>
      */
-    public function execute(ExportAuditLogsCommand $command, User $actor, RequestOrigin $origin): LazyCollection
+    public function execute(ExportAuditLogsCommand $exportAuditLogsCommand, User $actor, RequestOrigin $requestOrigin): LazyCollection
     {
         $exportedAt = CarbonImmutable::now();
-        $this->recordExport($command, $actor, $origin);
+        $this->recordExport($exportAuditLogsCommand, $actor, $requestOrigin);
 
-        return $this->auditLogRows->newestFirst($command, $exportedAt);
+        return $this->auditLogRows->newestFirst($exportAuditLogsCommand, $exportedAt);
     }
 
-    protected function recordExport(ExportAuditLogsCommand $command, User $actor, RequestOrigin $origin): void
+    protected function recordExport(ExportAuditLogsCommand $exportAuditLogsCommand, User $actor, RequestOrigin $requestOrigin): void
     {
-        $companyId = $command->company->getKey();
+        $companyId = $exportAuditLogsCommand->company->getKey();
 
-        $this->writer->write([
-            ...$this->writer->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $companyId), $origin),
+        $this->auditTrailWriter->write([
+            ...$this->auditTrailWriter->actorAndOrigin($actor, $this->memberRoleCode->of($actor, $companyId), $requestOrigin),
             'company_id' => $companyId,
             'stored_event_id' => null,
             'event_class' => 'AuditLogsExported',
@@ -46,10 +46,10 @@ class ExportAuditLogsInteractor
             'subject_id' => $companyId,
             'subject_label' => null,
             'metadata' => [
-                'format' => $command->format->value,
-                'from' => $this->auditLogRows->from($command, $command->company)->toDateString(),
-                'until' => ($command->within?->getIncludedEndDate() ?? today())->toDateString(),
-                ...array_filter(['user' => $command->user, 'event' => $command->event, 'ip' => $command->ip]),
+                'format' => $exportAuditLogsCommand->format->value,
+                'from' => $this->auditLogRows->from($exportAuditLogsCommand, $exportAuditLogsCommand->company)->toDateString(),
+                'until' => ($exportAuditLogsCommand->within?->getIncludedEndDate() ?? today())->toDateString(),
+                ...array_filter(['user' => $exportAuditLogsCommand->user, 'event' => $exportAuditLogsCommand->event, 'ip' => $exportAuditLogsCommand->ip]),
             ],
         ], AuditAction::AuditLogsExported, 'warning');
     }
