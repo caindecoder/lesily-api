@@ -52,10 +52,10 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
     {
         $files = [];
 
-        foreach (File::allFiles(base_path('tests')) as $file) {
-            $path = 'tests/'.str_replace('\\', '/', $file->getRelativePathname());
+        foreach (File::allFiles(base_path('tests')) as $splFileInfo) {
+            $path = 'tests/'.str_replace('\\', '/', $splFileInfo->getRelativePathname());
 
-            if ($path === 'tests/TestCase.php' || $this->isModuleBase($path) || $this->declaresATrait($file->getContents())) {
+            if ($path === 'tests/TestCase.php' || $this->isModuleBase($path) || $this->declaresATrait($splFileInfo->getContents())) {
                 /** @var class-string $class */
                 $class = 'Tests\\'.str_replace(['/', '.php'], ['\\', ''], substr($path, strlen('tests/')));
                 $files[$path] = $class;
@@ -78,11 +78,11 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
         $declaredIn = [];
 
         foreach ($files as $path => $class) {
-            $reflection = new ReflectionClass($class);
+            $reflectionClass = new ReflectionClass($class);
 
-            foreach ($reflection->getMethods() as $method) {
-                if ($this->isOwnHelper($method, $reflection)) {
-                    $declaredIn[strtolower($method->getName())][] = $path;
+            foreach ($reflectionClass->getMethods() as $reflectionMethod) {
+                if ($this->isOwnHelper($reflectionMethod, $reflectionClass)) {
+                    $declaredIn[strtolower($reflectionMethod->getName())][] = $path;
                 }
             }
         }
@@ -93,12 +93,12 @@ class SharedTestHelpersAreDefinedOnceTest extends FoundationTestCase
     }
 
     /**
-     * @param  ReflectionClass<object>  $reflection
+     * @param  ReflectionClass<object>  $reflectionClass
      */
-    protected function isOwnHelper(ReflectionMethod $method, ReflectionClass $reflection): bool
+    protected function isOwnHelper(ReflectionMethod $reflectionMethod, ReflectionClass $reflectionClass): bool
     {
-        return $method->getFileName() === $reflection->getFileName()
-            && ! in_array(strtolower($method->getName()), self::LIFECYCLE_METHODS, true);
+        return $reflectionMethod->getFileName() === $reflectionClass->getFileName()
+            && ! in_array(strtolower($reflectionMethod->getName()), self::LIFECYCLE_METHODS, true);
     }
 
     protected function isModuleBase(string $path): bool

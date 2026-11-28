@@ -44,15 +44,15 @@ class DatabaseSeederTest extends FoundationTestCase
 
     protected function assertRbacCatalogSeeded(): void
     {
-        $owner = Role::findByCode('owner');
+        $role = Role::findByCode('owner');
 
-        $this->assertNotNull($owner, 'The owner role the registration flow enrols against must exist.');
+        $this->assertNotNull($role, 'The owner role the registration flow enrols against must exist.');
         $this->assertTrue(
             Permission::query()->where('code', 'users.view')->exists(),
             'The permission catalog must be seeded.',
         );
         $this->assertTrue(
-            RolePermission::query()->where('role_id', $owner->getKey())->exists(),
+            RolePermission::query()->where('role_id', $role->getKey())->exists(),
             'Owner role-permission mappings must be seeded.',
         );
     }

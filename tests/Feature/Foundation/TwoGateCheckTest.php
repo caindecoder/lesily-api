@@ -31,11 +31,11 @@ class TwoGateCheckTest extends FoundationTestCase
     #[DataProvider('provideUnderTieredFeatures')]
     public function when_a_feature_is_outside_the_companys_plan_then_the_minimum_upgrade_tier_is_returned(
         string $route,
-        BillingPlan $plan,
+        BillingPlan $billingPlan,
         string $expectedTier,
     ): void {
         // Given Contoso on the row's plan
-        $this->putOnPlan($this->company, $plan);
+        $this->putOnPlan($this->company, $billingPlan);
 
         // When
         $response = $this->attemptGatedAction($route, $this->member, $this->company);
@@ -102,9 +102,9 @@ class TwoGateCheckTest extends FoundationTestCase
         // Given Contoso on Enterprise (a deprecated feature granted by no plan or add-on, even on the top tier)
         $this->putOnPlan($this->company, BillingPlan::Enterprise);
         $loggedContext = null;
-        Log::listen(function (MessageLogged $log) use (&$loggedContext): void {
-            if ($log->level === 'warning') {
-                $loggedContext = $log->context;
+        Log::listen(function (MessageLogged $messageLogged) use (&$loggedContext): void {
+            if ($messageLogged->level === 'warning') {
+                $loggedContext = $messageLogged->context;
             }
         });
 
@@ -185,10 +185,10 @@ class TwoGateCheckTest extends FoundationTestCase
 
     #[Test]
     #[DataProvider('provideGrantedFeatures')]
-    public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $plan): void
+    public function when_a_companys_plan_grants_a_feature_then_access_proceeds(string $route, BillingPlan $billingPlan): void
     {
         // Given Contoso on the row's plan (each tier grants its own features and inherits every lower tier's)
-        $this->putOnPlan($this->company, $plan);
+        $this->putOnPlan($this->company, $billingPlan);
 
         // When
         $response = $this->attemptGatedAction($route, $this->member, $this->company);

@@ -20,14 +20,14 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     public function when_source_file_missing_then_seeder_throws_with_file_path(): void
     {
         // Given a seeder configured to read from a non-existent path
-        $seeder = $this->newSeeder('/nonexistent/rbac-catalog');
+        $rolesPermissionsSeeder = $this->newSeeder('/nonexistent/rbac-catalog');
 
         // When the seeder runs
         // Then it throws SeederSourceException naming the missing file
         $this->expectException(SeederSourceException::class);
         $this->expectExceptionMessage('/nonexistent/rbac-catalog/roles.yaml');
 
-        $seeder->run();
+        $rolesPermissionsSeeder->run();
     }
 
     #[Test]
@@ -45,8 +45,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         try {
             $this->newSeeder($dir)->run();
             $this->fail('SeederSourceException was not thrown.');
-        } catch (SeederSourceException $e) {
-            $this->assertStringContainsString('permissions.yaml', $e->getMessage());
+        } catch (SeederSourceException $seederSourceException) {
+            $this->assertStringContainsString('permissions.yaml', $seederSourceException->getMessage());
             $this->assertSame(0, DB::table('roles')->count());
         }
     }
@@ -72,8 +72,8 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         try {
             $this->newSeeder($dir)->run();
             $this->fail('SeederSourceException was not thrown.');
-        } catch (SeederSourceException $e) {
-            $this->assertStringContainsString($badCode, $e->getMessage());
+        } catch (SeederSourceException $seederSourceException) {
+            $this->assertStringContainsString($badCode, $seederSourceException->getMessage());
             $this->assertSame(0, DB::table('roles')->count());
             $this->assertSame(0, DB::table('permissions')->count());
             $this->assertSame(0, DB::table('role_permission')->count());
@@ -84,12 +84,12 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     public function when_seeder_runs_twice_then_all_table_counts_are_unchanged(): void
     {
         // Given the real RBAC catalog
-        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+        $rolesPermissionsSeeder = $this->newSeeder($this->givenRealCatalogPath());
 
         // When the seeder runs twice
-        $seeder->run();
+        $rolesPermissionsSeeder->run();
         $afterFirst = $this->tableCounts();
-        $seeder->run();
+        $rolesPermissionsSeeder->run();
         $afterSecond = $this->tableCounts();
 
         // Then every table's row count is stable across runs (idempotent — no duplicates)
@@ -101,10 +101,10 @@ class RolesPermissionsSeederTest extends FoundationTestCase
     public function when_seeder_runs_then_eight_roles_persisted_with_canonical_codes_and_stable_uuids(): void
     {
         // Given the real RBAC catalog shipped in database/seeders/data
-        $seeder = $this->newSeeder($this->givenRealCatalogPath());
+        $rolesPermissionsSeeder = $this->newSeeder($this->givenRealCatalogPath());
 
         // When the seeder runs
-        $seeder->run();
+        $rolesPermissionsSeeder->run();
 
         // Then the 8 canonical role codes are persisted in sort order
         $codes = Role::query()->orderBy('sort_order')->pluck('code')->all();
@@ -120,9 +120,9 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         ], $codes);
 
         // And the owner role is persisted faithfully with its committed stable UUID
-        $owner = Role::query()->where('code', 'owner')->firstOrFail();
-        $this->assertSame('0193abcd-1111-7000-8000-000000000002', $owner->getKey());
-        $this->assertOwnerRolePersistedFaithfully($owner);
+        $role = Role::query()->where('code', 'owner')->firstOrFail();
+        $this->assertSame('0193abcd-1111-7000-8000-000000000002', $role->getKey());
+        $this->assertOwnerRolePersistedFaithfully($role);
     }
 
     #[Test]
@@ -191,14 +191,14 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         // When owner is looked up by code and its permissions eager-loaded
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $owner = Role::findByCode('owner');
-        $this->assertNotNull($owner, 'Owner role must be seeded.');
-        $owner->load('permissions');
+        $role = Role::findByCode('owner');
+        $this->assertNotNull($role, 'Owner role must be seeded.');
+        $role->load('permissions');
         $queryCount = count(DB::getQueryLog());
         DB::disableQueryLog();
 
         // Then owner has its full permission set in exactly 2 queries (no N+1)
-        $this->assertGreaterThan(0, $owner->permissions->count(), 'Owner should have permission grants.');
+        $this->assertGreaterThan(0, $role->permissions->count(), 'Owner should have permission grants.');
         $this->assertSame(2, $queryCount, "Expected 2 queries (role + permissions), got {$queryCount}.");
     }
 
@@ -253,7 +253,7 @@ class RolesPermissionsSeederTest extends FoundationTestCase
         ];
     }
 
-    protected function assertOwnerRolePersistedFaithfully(Role $owner): void
+    protected function assertOwnerRolePersistedFaithfully(Role $role): void
     {
         $this->assertSame([
             'name' => 'Owner',
@@ -262,7 +262,7 @@ class RolesPermissionsSeederTest extends FoundationTestCase
             'is_assignable' => true,
             'is_system' => true,
             'sort_order' => 2,
-        ], $owner->only(['name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order']));
+        ], $role->only(['name', 'description', 'scope', 'is_assignable', 'is_system', 'sort_order']));
     }
 
     protected function assertInviteUsersPermissionPersistedFaithfully(): void

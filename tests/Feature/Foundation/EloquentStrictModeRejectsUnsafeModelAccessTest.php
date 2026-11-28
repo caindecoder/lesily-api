@@ -30,7 +30,7 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
         $this->expectException(LazyLoadingViolationException::class);
         $this->expectExceptionMessage('[addons]');
 
-        $addons = $companies->firstOrFail()->addons;
+        $companyAddons = $companies->firstOrFail()->addons;
     }
 
     #[Test]
@@ -67,14 +67,14 @@ class EloquentStrictModeRejectsUnsafeModelAccessTest extends FoundationTestCase
     public function when_a_relation_is_read_lazily_on_a_model_fetched_alone_then_it_is_allowed(): void
     {
         // Given one company holding an add-on, fetched on its own
-        $created = Company::factory()->withAddon(Addon::TemplateEngine)->create();
-        $company = Company::query()->whereKey($created->getKey())->firstOrFail();
+        $company = Company::factory()->withAddon(Addon::TemplateEngine)->create();
+        $company = Company::query()->whereKey($company->getKey())->firstOrFail();
 
         // When the add-ons relation is read lazily on that single model
-        $addons = $company->addons;
+        $companyAddons = $company->addons;
 
         // Then the framework's single-model exemption lets the read through
-        $this->assertCount(1, $addons);
+        $this->assertCount(1, $companyAddons);
     }
 
     #[Test]

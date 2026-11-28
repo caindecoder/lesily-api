@@ -18,14 +18,14 @@ class CountriesSeederTest extends FoundationTestCase
     public function when_the_source_file_is_missing_then_the_seeder_throws_with_the_file_path(): void
     {
         // Given a seeder reading a file that does not exist
-        $seeder = $this->newSeeder('/nonexistent/countries.yaml');
+        $countriesSeeder = $this->newSeeder('/nonexistent/countries.yaml');
 
         // When the seeder runs
         // Then it throws naming the missing file
         $this->expectException(CountrySourceException::class);
         $this->expectExceptionMessage('missing or unreadable: /nonexistent/countries.yaml');
 
-        $seeder->run();
+        $countriesSeeder->run();
     }
 
     #[Test]
@@ -40,8 +40,8 @@ class CountriesSeederTest extends FoundationTestCase
         try {
             $this->newSeeder($path)->run();
             $this->fail('CountrySourceException was not thrown.');
-        } catch (CountrySourceException $e) {
-            $this->assertStringContainsString($path, $e->getMessage());
+        } catch (CountrySourceException $countrySourceException) {
+            $this->assertStringContainsString($path, $countrySourceException->getMessage());
             $this->assertSame($before, $this->storedCountries());
         }
     }
@@ -95,7 +95,7 @@ class CountriesSeederTest extends FoundationTestCase
     public function when_a_country_value_changes_in_the_file_then_its_row_is_updated_and_keeps_its_key(): void
     {
         // Given Sri Lanka seeded from the bundled file
-        $original = $this->givenSriLankaSeeded();
+        $country = $this->givenSriLankaSeeded();
         $path = $this->givenTempSource($this->sriLankaYamlWithWorkingDays(6));
         $this->travel(1)->seconds();
 
@@ -103,7 +103,7 @@ class CountriesSeederTest extends FoundationTestCase
         $this->newSeeder($path)->run();
 
         // Then the same row carries the new value
-        $this->assertCountryRowUpdated($original, 6);
+        $this->assertCountryRowUpdated($country, 6);
     }
 
     #[Test]
@@ -147,15 +147,15 @@ class CountriesSeederTest extends FoundationTestCase
             "  working_days_per_week: {$days}\n  default_work_hours_per_day: 8.00\n";
     }
 
-    protected function assertCountryRowUpdated(Country $original, int $workingDays): void
+    protected function assertCountryRowUpdated(Country $originalCountry, int $workingDays): void
     {
-        $stored = Country::query()->where('code', 'LK')->sole();
+        $storedCountry = Country::query()->where('code', 'LK')->sole();
 
-        $this->assertSame($workingDays, $stored->working_days_per_week);
-        $this->assertSame($original->getKey(), $stored->getKey());
-        $this->assertEquals($original->created_at, $stored->created_at);
-        $this->assertNotNull($original->updated_at);
-        $this->assertTrue($stored->updated_at?->greaterThan($original->updated_at) ?? false);
+        $this->assertSame($workingDays, $storedCountry->working_days_per_week);
+        $this->assertSame($originalCountry->getKey(), $storedCountry->getKey());
+        $this->assertEquals($originalCountry->created_at, $storedCountry->created_at);
+        $this->assertNotNull($originalCountry->updated_at);
+        $this->assertTrue($storedCountry->updated_at?->greaterThan($originalCountry->updated_at) ?? false);
     }
 
     protected function assertSriLankaDefaults(): void

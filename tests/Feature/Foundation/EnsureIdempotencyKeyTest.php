@@ -149,11 +149,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $otherUser = User::factory()->create();
 
         // When both send a mutation with that key
-        $first = $this->sendRequiredMutation(key: $key, user: $this->user);
-        $second = $this->sendRequiredMutation(key: $key, user: $otherUser);
+        $firstResponse = $this->sendRequiredMutation(key: $key, user: $this->user);
+        $secondResponse = $this->sendRequiredMutation(key: $key, user: $otherUser);
 
         // Then each request is processed independently, not replayed against the other
-        $this->assertBothProcessedIndependently($first, $second);
+        $this->assertBothProcessedIndependently($firstResponse, $secondResponse);
     }
 
     #[Test]
@@ -164,11 +164,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $key = 'cross-route-key';
 
         // When the user sends it to the required (POST) route and the optional (PATCH) route
-        $required = $this->sendRequiredMutation(key: $key);
-        $optional = $this->sendOptionalMutation(key: $key);
+        $requiredResponse = $this->sendRequiredMutation(key: $key);
+        $optionalResponse = $this->sendOptionalMutation(key: $key);
 
         // Then each route processes independently — no cross-route replay
-        $this->assertProcessedOnDistinctRoutes($required, $optional);
+        $this->assertProcessedOnDistinctRoutes($requiredResponse, $optionalResponse);
     }
 
     #[Test]
@@ -188,19 +188,19 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
     public function when_a_fresh_request_is_cached_then_it_is_stored_for_the_24h_dedup_window(): void
     {
         // Given a cache store whose write we can observe
-        /** @var Repository&MockInterface $store */
-        $store = Mockery::mock(Repository::class);
+        /** @var Repository&MockInterface $storeMock */
+        $storeMock = Mockery::mock(Repository::class);
 
         // Winner reserves, then completes — the remembered result carries the 24h TTL.
         /** @var Expectation $add */
-        $add = $store->shouldReceive('add');
+        $add = $storeMock->shouldReceive('add');
         $add->andReturnTrue();
 
         /** @var Expectation $put */
-        $put = $store->shouldReceive('put');
+        $put = $storeMock->shouldReceive('put');
         $put->once()->with(Mockery::type('string'), Mockery::type('array'), 86400);
 
-        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($storeMock));
 
         // When a fresh mutation is processed
         $response = $this->sendRequiredMutation(key: 'a1b2c3d4-ttl');
@@ -216,14 +216,14 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         Event::fake();
         $key = 'a1b2c3d4-replay';
         $body = ['type' => 'access'];
-        $first = $this->sendRequiredMutation(key: $key, body: $body);
-        $first->assertCreated();
+        $firstResponse = $this->sendRequiredMutation(key: $key, body: $body);
+        $firstResponse->assertCreated();
 
         // When the identical request is retried with the same key
-        $replay = $this->sendRequiredMutation(key: $key, body: $body);
+        $replayResponse = $this->sendRequiredMutation(key: $key, body: $body);
 
         // Then the original response is replayed and the side-effect is not repeated
-        $this->assertReplayed($first, $replay);
+        $this->assertReplayed($firstResponse, $replayResponse);
     }
 
     #[Test]
@@ -234,11 +234,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $key = 'a1b2c3d4-released';
 
         // When it is sent, fails, and is retried with the same key
-        $first = $this->sendFailingMutation(key: $key);
-        $second = $this->sendFailingMutation(key: $key);
+        $firstResponse = $this->sendFailingMutation(key: $key);
+        $secondResponse = $this->sendFailingMutation(key: $key);
 
         // Then the reservation was released, so the retry re-executes rather than being blocked
-        $this->assertReattemptedAfterFailure($first, $second);
+        $this->assertReattemptedAfterFailure($firstResponse, $secondResponse);
     }
 
     #[Test]
@@ -249,11 +249,11 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $key = 'a1b2c3d4-threw';
 
         // When it is sent, errors, and is retried with the same key
-        $first = $this->sendThrowingMutation(key: $key);
-        $second = $this->sendThrowingMutation(key: $key);
+        $firstResponse = $this->sendThrowingMutation(key: $key);
+        $secondResponse = $this->sendThrowingMutation(key: $key);
 
         // Then the reservation was released, so the retry re-executes rather than being blocked
-        $this->assertReattemptedAfterError($first, $second);
+        $this->assertReattemptedAfterError($firstResponse, $secondResponse);
     }
 
     protected function sendRequiredMutation(?string $key = null, array $body = [], ?User $user = null): TestResponse
@@ -311,33 +311,33 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
 
     protected function mockStoreUnavailable(): void
     {
-        /** @var Repository&MockInterface $store */
-        $store = Mockery::mock(Repository::class);
+        /** @var Repository&MockInterface $storeMock */
+        $storeMock = Mockery::mock(Repository::class);
 
         // Reserve-first: the atomic add is the first store touch, so failing it
         // exercises the fail-closed path.
         /** @var Expectation $add */
-        $add = $store->shouldReceive('add');
+        $add = $storeMock->shouldReceive('add');
         $add->andThrow(new RuntimeException('Redis connection refused'));
 
-        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($storeMock));
     }
 
     protected function mockStoreWriteFails(): void
     {
-        /** @var Repository&MockInterface $store */
-        $store = Mockery::mock(Repository::class);
+        /** @var Repository&MockInterface $storeMock */
+        $storeMock = Mockery::mock(Repository::class);
 
         // Winner reserves successfully, then the result write (complete) fails.
         /** @var Expectation $add */
-        $add = $store->shouldReceive('add');
+        $add = $storeMock->shouldReceive('add');
         $add->andReturnTrue();
 
         /** @var Expectation $put */
-        $put = $store->shouldReceive('put');
+        $put = $storeMock->shouldReceive('put');
         $put->andThrow(new RuntimeException('Redis connection refused'));
 
-        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($store));
+        $this->app->instance(IdempotencyCache::class, new IdempotencyCache($storeMock));
     }
 
     /**
@@ -384,17 +384,17 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertJsonStructure(['status', 'message', 'error_code', 'errors', 'correlation_id']);
     }
 
-    protected function assertReattemptedAfterFailure(TestResponse $first, TestResponse $second): void
+    protected function assertReattemptedAfterFailure(TestResponse $firstResponse, TestResponse $secondResponse): void
     {
-        $first->assertUnprocessable();
-        $second->assertUnprocessable();
+        $firstResponse->assertUnprocessable();
+        $secondResponse->assertUnprocessable();
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 
-    protected function assertReattemptedAfterError(TestResponse $first, TestResponse $second): void
+    protected function assertReattemptedAfterError(TestResponse $firstResponse, TestResponse $secondResponse): void
     {
-        $first->assertInternalServerError();
-        $second->assertInternalServerError();
+        $firstResponse->assertInternalServerError();
+        $secondResponse->assertInternalServerError();
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 
@@ -405,28 +405,28 @@ class EnsureIdempotencyKeyTest extends FoundationTestCase
         $response->assertJsonStructure(['id']);
     }
 
-    protected function assertReplayed(TestResponse $first, TestResponse $replay): void
+    protected function assertReplayed(TestResponse $firstResponse, TestResponse $replayResponse): void
     {
-        $replay->assertCreated();
-        $replay->assertHeader('Idempotency-Replayed', 'true');
-        $replay->assertHeader('Content-Type', $first->headers->get('Content-Type'));
-        $this->assertSame($first->json('id'), $replay->json('id'));
+        $replayResponse->assertCreated();
+        $replayResponse->assertHeader('Idempotency-Replayed', 'true');
+        $replayResponse->assertHeader('Content-Type', $firstResponse->headers->get('Content-Type'));
+        $this->assertSame($firstResponse->json('id'), $replayResponse->json('id'));
         Event::assertDispatchedTimes('probe.idempotent.executed', 1);
     }
 
-    protected function assertBothProcessedIndependently(TestResponse $first, TestResponse $second): void
+    protected function assertBothProcessedIndependently(TestResponse $firstResponse, TestResponse $secondResponse): void
     {
-        $first->assertCreated();
-        $second->assertCreated();
-        $this->assertNotSame($first->json('id'), $second->json('id'));
+        $firstResponse->assertCreated();
+        $secondResponse->assertCreated();
+        $this->assertNotSame($firstResponse->json('id'), $secondResponse->json('id'));
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 
-    protected function assertProcessedOnDistinctRoutes(TestResponse $required, TestResponse $optional): void
+    protected function assertProcessedOnDistinctRoutes(TestResponse $requiredResponse, TestResponse $optionalResponse): void
     {
-        $required->assertCreated();
-        $optional->assertOk();
-        $this->assertNotSame($required->json('id'), $optional->json('id'));
+        $requiredResponse->assertCreated();
+        $optionalResponse->assertOk();
+        $this->assertNotSame($requiredResponse->json('id'), $optionalResponse->json('id'));
         Event::assertDispatchedTimes('probe.idempotent.executed', 2);
     }
 

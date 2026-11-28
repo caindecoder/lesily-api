@@ -20,11 +20,11 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     public function when_email_delivery_fails_then_the_failure_is_logged_without_alerting_the_user(): void
     {
         Exceptions::fake();
-        $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
 
-        $mail->failed(new RuntimeException('Mail server unavailable'));
+        $systemNotificationMail->failed(new RuntimeException('Mail server unavailable'));
 
-        $this->assertFailureLoggedWithRetryConfig($mail);
+        $this->assertFailureLoggedWithRetryConfig($systemNotificationMail);
     }
 
     #[Test]
@@ -39,7 +39,7 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         $recipient->notify(new SystemNotification(NotificationType::DsarDeadlineMissed, 'Contoso', null, $details));
 
         // Then its email and its in-app record both keep those details
-        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $mail): bool => $mail->details === $details);
+        Mail::assertQueued(SystemNotificationMail::class, fn (SystemNotificationMail $systemNotificationMail): bool => $systemNotificationMail->details === $details);
         $this->assertSame($details, $recipient->notifications()->sole()->data['details']);
     }
 
@@ -62,15 +62,15 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
 
     #[Test]
     #[DataProvider('provideOptOutTypes')]
-    public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(NotificationType $type): void
+    public function when_user_opted_out_of_a_non_critical_notification_then_email_is_skipped_but_in_app_is_created(NotificationType $notificationType): void
     {
         // Given a user who opted out of this type's email
         Mail::fake();
         $recipient = User::factory()->create();
-        $this->optOutOfMail($recipient, $type);
+        $this->optOutOfMail($recipient, $notificationType);
 
         // When a notice of the type is raised for them
-        $recipient->notify(new SystemNotification($type, 'Contoso', null));
+        $recipient->notify(new SystemNotification($notificationType, 'Contoso', null));
 
         // Then only the in-app record is delivered
         $this->assertOnlyInAppDelivered($recipient);
@@ -78,15 +78,15 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
 
     #[Test]
     #[DataProvider('provideCriticalTypes')]
-    public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(NotificationType $type): void
+    public function when_notification_is_critical_then_user_opt_out_is_ignored_and_email_is_sent(NotificationType $notificationType): void
     {
         // Given a user who opted out of this critical type's email
         Mail::fake();
         $recipient = User::factory()->create();
-        $this->optOutOfMail($recipient, $type);
+        $this->optOutOfMail($recipient, $notificationType);
 
         // When a notice of the type is raised for them
-        $recipient->notify(new SystemNotification($type, 'Contoso', null));
+        $recipient->notify(new SystemNotification($notificationType, 'Contoso', null));
 
         // Then the email is queued anyway, beside the in-app record
         $this->assertEmailQueuedAndInAppCreated($recipient);
@@ -107,9 +107,9 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     #[Test]
     public function when_the_email_is_built_then_its_subject_is_the_localised_template_with_the_company_name(): void
     {
-        $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
 
-        $this->assertSame('Security alert for Contoso', $mail->envelope()->subject);
+        $this->assertSame('Security alert for Contoso', $systemNotificationMail->envelope()->subject);
     }
 
     #[Test]
@@ -192,16 +192,16 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
         ];
     }
 
-    protected function optOutOfMail(User $recipient, NotificationType $type): void
+    protected function optOutOfMail(User $recipient, NotificationType $notificationType): void
     {
-        NotificationPreference::factory()->mailDisabled($recipient, $type)->create();
+        NotificationPreference::factory()->mailDisabled($recipient, $notificationType)->create();
     }
 
-    protected function assertFailureLoggedWithRetryConfig(SystemNotificationMail $mail): void
+    protected function assertFailureLoggedWithRetryConfig(SystemNotificationMail $systemNotificationMail): void
     {
         Exceptions::assertReported(RuntimeException::class);
-        $this->assertSame(3, $mail->tries);
-        $this->assertSame([1, 5, 15], $mail->backoff);
+        $this->assertSame(3, $systemNotificationMail->tries);
+        $this->assertSame([1, 5, 15], $systemNotificationMail->backoff);
     }
 
     protected function assertOnlyInAppDelivered(User $recipient): void
@@ -220,17 +220,17 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     {
         Mail::assertQueued(
             SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->locale === $expected,
+            fn (SystemNotificationMail $systemNotificationMail): bool => $systemNotificationMail->locale === $expected,
         );
     }
 
     protected function assertContentScopedToCompany(User $recipient, Company $recipientCompany, Company $otherCompany): void
     {
-        $notification = $recipient->notifications()->sole();
-        $this->assertSame($recipientCompany->getKey(), $notification->company_id);
-        $this->assertSame($recipientCompany->name, $notification->data['company_name']);
-        $this->assertNotSame($otherCompany->name, $notification->data['company_name']);
-        $this->assertSame(NotificationType::AccountSecurityAlert->value, $notification->data['notification_type']);
+        $databaseNotification = $recipient->notifications()->sole();
+        $this->assertSame($recipientCompany->getKey(), $databaseNotification->company_id);
+        $this->assertSame($recipientCompany->name, $databaseNotification->data['company_name']);
+        $this->assertNotSame($otherCompany->name, $databaseNotification->data['company_name']);
+        $this->assertSame(NotificationType::AccountSecurityAlert->value, $databaseNotification->data['notification_type']);
     }
 
     protected function assertInAppCreatedAndEmailQueuedIndependently(User $recipient): void
@@ -246,8 +246,8 @@ class ReceiveEmailNotificationTest extends FoundationTestCase
     {
         Mail::assertQueued(
             SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->hasTo($recipient->email)
-                && $mail->envelope()->replyTo !== [],
+            fn (SystemNotificationMail $systemNotificationMail): bool => $systemNotificationMail->hasTo($recipient->email)
+                && $systemNotificationMail->envelope()->replyTo !== [],
         );
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->getKey()]);
     }
