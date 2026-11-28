@@ -20,40 +20,40 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
  */
 class UserLevelAudit
 {
-    public function __construct(protected readonly AuditTrailWriter $writer) {}
+    public function __construct(protected readonly AuditTrailWriter $auditTrailWriter) {}
 
-    public function record(User $user, AuditAction $action, RequestOrigin $origin): void
+    public function record(User $user, AuditAction $auditAction, RequestOrigin $requestOrigin): void
     {
-        $this->writeForEachMembership($user, $origin, fn (array $row) => $this->writer->write(
+        $this->writeForEachMembership($user, $requestOrigin, fn (array $row) => $this->auditTrailWriter->write(
             [...$row, 'metadata' => null],
-            $action,
+            $auditAction,
             'warning',
         ));
     }
 
-    public function profileUpdated(User $user, FieldChanges $changes, RequestOrigin $origin): void
+    public function profileUpdated(User $user, FieldChanges $fieldChanges, RequestOrigin $requestOrigin): void
     {
-        $this->writeForEachMembership($user, $origin, fn (array $row) => $this->writer->write(
-            [...$row, 'metadata' => ['changes' => $changes->toArray()]],
+        $this->writeForEachMembership($user, $requestOrigin, fn (array $row) => $this->auditTrailWriter->write(
+            [...$row, 'metadata' => ['changes' => $fieldChanges->toArray()]],
             AuditAction::ProfileUpdated,
             'info',
         ));
     }
 
     /** @param Closure(array<string, mixed>): void $write */
-    protected function writeForEachMembership(User $user, RequestOrigin $origin, Closure $write): void
+    protected function writeForEachMembership(User $user, RequestOrigin $requestOrigin, Closure $write): void
     {
-        $storedEvent = $this->newestEventOf($user);
+        $eloquentStoredEvent = $this->newestEventOf($user);
 
-        foreach ($this->membershipsOf($user) as $membership) {
+        foreach ($this->membershipsOf($user) as $stdClass) {
             $write([
-                'company_id' => $membership->company_id,
-                'stored_event_id' => $storedEvent->getKey(),
-                'event_class' => class_basename($storedEvent->event_class),
+                'company_id' => $stdClass->company_id,
+                'stored_event_id' => $eloquentStoredEvent->getKey(),
+                'event_class' => class_basename($eloquentStoredEvent->event_class),
                 'subject_type' => AuditSubjectType::User,
                 'subject_id' => $user->getKey(),
                 'subject_label' => null,
-                ...$this->writer->actorAndOrigin($user, $membership->role_code, $origin),
+                ...$this->auditTrailWriter->actorAndOrigin($user, $stdClass->role_code, $requestOrigin),
             ]);
         }
     }

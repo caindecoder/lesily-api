@@ -12,10 +12,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 readonly class AuditLogPage
 {
     /**
-     * @param  LengthAwarePaginator<int, stdClass>  $rows
+     * @param  LengthAwarePaginator<int, stdClass>  $stdClasses
      */
     public function __construct(
-        public LengthAwarePaginator $rows,
-        public CarbonImmutable $retentionFrom,
+        public LengthAwarePaginator $stdClasses,
+        public CarbonImmutable $retentionStartDate,
     ) {}
 }

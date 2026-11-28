@@ -25,8 +25,8 @@ class AuditLogController extends Controller
     {
         $page = $interactor->execute(ListAuditLogsCommand::fromQuery($request), $request->company());
 
-        return (new AuditLogRowCollection($page->rows))
-            ->additional(['meta' => ['retention' => ['from' => $page->retentionFrom->toDateString()]]])
+        return (new AuditLogRowCollection($page->stdClasses))
+            ->additional(['meta' => ['retention' => ['from' => $page->retentionStartDate->toDateString()]]])
             ->response($request);
     }
 
