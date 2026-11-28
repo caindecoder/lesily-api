@@ -130,7 +130,7 @@ class TrialExpiredNotificationTest extends CompaniesTestCase
         Notification::assertSentTo(
             $recipient,
             SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
+            fn (SystemNotification $notification): bool => $notification->notificationType === NotificationType::GeneralAccountNotice
                 && $notification->companyName === self::COMPANY_NAME
                 && $notification->companyId === $companyId,
         );

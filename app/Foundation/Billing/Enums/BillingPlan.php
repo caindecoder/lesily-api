@@ -48,9 +48,9 @@ enum BillingPlan: string
      */
     public static function lowestPlanWith(Feature $feature): ?self
     {
-        foreach (self::cases() as $plan) {
-            if (in_array($feature, $plan->features(), strict: true)) {
-                return $plan;
+        foreach (self::cases() as $billingPlan) {
+            if (in_array($feature, $billingPlan->features(), strict: true)) {
+                return $billingPlan;
             }
         }
 

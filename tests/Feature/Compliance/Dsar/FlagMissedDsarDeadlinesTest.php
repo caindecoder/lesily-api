@@ -410,7 +410,7 @@ class FlagMissedDsarDeadlinesTest extends DsarTestCase
         $this->assertCount(2, $this->platformAdmins);
         foreach ($this->platformAdmins as $platformAdmin) {
             Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
-            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::DsarDeadlineMissed
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::DsarDeadlineMissed
                 && $systemNotification->companyName === $this->company->name
                 && $systemNotification->companyId === null
                 && $systemNotification->details === ['request' => $dsarRequest->getKey(), 'deadline' => '31 Oct 2026, 09:00 UTC']);

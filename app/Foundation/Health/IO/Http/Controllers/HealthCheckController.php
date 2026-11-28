@@ -10,9 +10,9 @@ use App\Foundation\Health\Actions\CheckHealthAction;
 
 class HealthCheckController extends Controller
 {
-    public function __invoke(CheckHealthAction $action): JsonResponse
+    public function __invoke(CheckHealthAction $checkHealthAction): JsonResponse
     {
-        $result = $action->execute();
+        $result = $checkHealthAction->execute();
 
         return response()->json(
             $result,

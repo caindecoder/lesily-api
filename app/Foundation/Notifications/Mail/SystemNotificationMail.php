@@ -38,9 +38,9 @@ class SystemNotificationMail extends Mailable implements ShouldQueue
      * After the retries are exhausted the failure is logged for ops — the user is
      * never alerted, because the in-app notification already informed them.
      */
-    public function failed(Throwable $exception): void
+    public function failed(Throwable $throwable): void
     {
-        report($exception);
+        report($throwable);
     }
 
     public function envelope(): Envelope

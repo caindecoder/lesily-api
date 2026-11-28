@@ -10,9 +10,9 @@ class EnvelopeBuilder
     /**
      * @param  array<string, mixed>  $additional
      */
-    public static function build(ApiErrorCode $code, string $message, array $additional = []): JsonResponse
+    public static function build(ApiErrorCode $apiErrorCode, string $message, array $additional = []): JsonResponse
     {
-        return self::buildWithStatus($code->status(), $code, $message, $additional);
+        return self::buildWithStatus($apiErrorCode->status(), $apiErrorCode, $message, $additional);
     }
 
     /**
@@ -22,14 +22,14 @@ class EnvelopeBuilder
      *
      * @param  array<string, mixed>  $additional
      */
-    public static function buildWithStatus(int $status, ApiErrorCode $code, string $message, array $additional = []): JsonResponse
+    public static function buildWithStatus(int $status, ApiErrorCode $apiErrorCode, string $message, array $additional = []): JsonResponse
     {
         $correlationId = Context::get('correlation_id');
 
         return response()->json([
             'status' => 'error',
             'message' => $message,
-            'error_code' => $code->value,
+            'error_code' => $apiErrorCode->value,
             // Cast forces an empty map to serialize as JSON {} (not []), so the
             // errors field is always an object for strict client schemas. A
             // validation error overrides this via $additional['errors'].

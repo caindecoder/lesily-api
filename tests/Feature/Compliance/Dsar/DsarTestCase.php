@@ -1328,7 +1328,7 @@ abstract class DsarTestCase extends TestCase
 
         foreach ([$dsarRequest->subject, $dsarRequest->requestedBy] as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === $notificationType
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === $notificationType
                 && $systemNotification->companyName === $company->name
                 && $systemNotification->companyId === $company->getKey());
         }

@@ -440,7 +440,7 @@ class AddLateBreachCompanyTest extends BreachIncidentsTestCase
         $this->assertCount(3, $this->initechMembers);
         foreach ($this->initechMembers as $member) {
             Notification::assertSentToTimes($member, SystemNotification::class, 1);
-            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+            Notification::assertSentTo($member, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachCompanyNotice
                 && $systemNotification->companyName === 'Initech Systems'
                 && $systemNotification->companyId === $this->initechCompany->getKey()
                 && $systemNotification->details === $this->initechPart());

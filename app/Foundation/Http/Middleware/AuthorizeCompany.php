@@ -17,13 +17,13 @@ use App\Foundation\Http\Exceptions\CompanyAccessDeniedException;
  */
 class AuthorizeCompany
 {
-    public function __construct(private readonly CompanyContextResolver $resolver) {}
+    public function __construct(private readonly CompanyContextResolver $companyContextResolver) {}
 
     public function handle(Request $request, Closure $next): Response
     {
         /** @var User $user — guaranteed by upstream auth:sanctum (cd-foundation-http step 3) */
         $user = $request->user();
-        $company = $this->resolver->resolve($request);
+        $company = $this->companyContextResolver->resolve($request);
 
         // wherePivotNull: a soft-deleted (removed, UC-1-024) membership is not a
         // live member — belongsToMany reads must filter the pivot column

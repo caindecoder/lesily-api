@@ -421,7 +421,7 @@ class RequestBreachFilingTest extends BreachIncidentsTestCase
         $this->assertCount(2, $platformAdmins);
         foreach ($platformAdmins as $platformAdmin) {
             Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
-            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachFilingRequested
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachFilingRequested
                 && $systemNotification->companyName === $company->name
                 && $systemNotification->companyId === null
                 && $systemNotification->details === ['incident' => $breachId]);

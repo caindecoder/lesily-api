@@ -276,7 +276,7 @@ class PasswordChangedNotificationTest extends AuthTestCase
         Notification::assertSentTo(
             $user,
             SystemNotification::class,
-            fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::PasswordChanged
+            fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::PasswordChanged
                 && $systemNotification->companyName === $companyName
                 && $systemNotification->companyId === null,
         );

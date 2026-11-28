@@ -84,7 +84,7 @@ class GoogleAccountLinkedNotificationTest extends AuthTestCase
         Notification::assertSentTo(
             $this->member,
             SystemNotification::class,
-            fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::GoogleAccountLinked
+            fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::GoogleAccountLinked
                 && $systemNotification->companyName === $this->company->name
                 && $systemNotification->companyId === null,
         );

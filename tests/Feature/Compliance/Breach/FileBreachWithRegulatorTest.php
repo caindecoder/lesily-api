@@ -530,7 +530,7 @@ class FileBreachWithRegulatorTest extends BreachIncidentsTestCase
 
         foreach ($recipients as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachFiledWithRegulator
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachFiledWithRegulator
                 && $systemNotification->companyName === $company->name
                 && $systemNotification->companyId === $company->getKey()
                 && $systemNotification->details === ['incident' => $breachId, 'filed_at' => self::FILED_AT_WORDS]);
