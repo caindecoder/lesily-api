@@ -38,16 +38,16 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
         // Given an otherwise-valid entry with no action (setAttribute pushes
         // null past the property type on purpose — the DB constraint is the
         // thing under test)
-        $entry = AuditEntry::factory()->make();
-        $entry->setAttribute('action', null);
+        $auditEntry = AuditEntry::factory()->make();
+        $auditEntry->setAttribute('action', null);
 
         // When it is appended
         try {
-            $entry->save();
+            $auditEntry->save();
             $this->fail('Expected the NOT NULL constraint on action to reject the insert.');
-        } catch (QueryException $e) {
+        } catch (QueryException $queryException) {
             // Then the insert is rejected by the integrity constraint on that column
-            $this->assertNotNullViolationOn($e, 'action');
+            $this->assertNotNullViolationOn($queryException, 'action');
         }
     }
 
@@ -87,11 +87,11 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     public function when_appending_a_platform_level_system_entry_then_nullable_scopes_hold(): void
     {
         // Given a platform-level, system-driven entry outside the event flow
-        $entry = AuditEntry::factory()->platformLevel()->system()->create();
+        $auditEntry = AuditEntry::factory()->platformLevel()->system()->create();
 
         // Then the row persists with the full nullable trio
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'company_id' => null,
             'actor_user_id' => null,
             'stored_event_id' => null,
@@ -107,11 +107,11 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     public function when_appending_an_entry_with_an_unmatched_stored_event_id_then_insert_succeeds(): void
     {
         // Given an entry referencing a stored event that does not exist
-        $entry = AuditEntry::factory()->fromStoredEvent(999999)->create();
+        $auditEntry = AuditEntry::factory()->fromStoredEvent(999999)->create();
 
         // Then the row persists carrying the unmatched reference
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'stored_event_id' => 999999,
         ]);
     }
@@ -126,14 +126,14 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     {
         // Given an entry carrying an event-class-specific metadata shape
         $metadata = ['reason' => 'dispute triage', 'evidence_ref' => 'TICKET-4821'];
-        $entry = AuditEntry::factory()->withMetadata($metadata)->create();
+        $auditEntry = AuditEntry::factory()->withMetadata($metadata)->create();
 
         // When it is read back from the table
-        $fresh = $entry->refresh();
+        $auditEntry = $auditEntry->refresh();
 
         // Then both declared casts hydrate the stored values
-        $this->assertSame($metadata, $fresh->metadata);
-        $this->assertInstanceOf(CarbonInterface::class, $fresh->recorded_at);
+        $this->assertSame($metadata, $auditEntry->metadata);
+        $this->assertInstanceOf(CarbonInterface::class, $auditEntry->recorded_at);
     }
 
     // Happy — the factory's tenant-scoped direct-write row (the UC-1-122
@@ -145,10 +145,10 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
     public function when_appending_a_tenant_scoped_entry_then_row_persists_append_only(): void
     {
         // Given a tenant-scoped admin-review entry
-        $entry = AuditEntry::factory()->create();
+        $auditEntry = AuditEntry::factory()->create();
 
         // Then the row persists append-only with the DB-default severity
-        $this->assertAppendOnlyPersistence($entry);
+        $this->assertAppendOnlyPersistence($auditEntry);
     }
 
     /**
@@ -157,13 +157,13 @@ class AppendAuditEntryTest extends PlatformAdminTestCase
      * is the live path), and the table carries neither updated_at nor
      * deleted_at (the ERD-1-11 append-only deviation).
      */
-    protected function assertAppendOnlyPersistence(AuditEntry $entry): void
+    protected function assertAppendOnlyPersistence(AuditEntry $auditEntry): void
     {
         $this->assertDatabaseHas('audit_trail', [
-            'id' => $entry->getKey(),
+            'id' => $auditEntry->getKey(),
             'severity' => 'info',
         ]);
-        $this->assertNotNull($entry->fresh()?->created_at);
+        $this->assertNotNull($auditEntry->fresh()?->created_at);
         $this->assertFalse(Schema::hasColumn('audit_trail', 'updated_at'));
         $this->assertFalse(Schema::hasColumn('audit_trail', 'deleted_at'));
     }

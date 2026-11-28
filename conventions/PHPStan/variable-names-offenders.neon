@@ -2911,24 +2911,6 @@ parameters:
 			path: ../../tests/Feature/Companies/ViewDataProtectionOfficerTest.php
 
 		-
-			message: '#^`AuditEntry \$entry` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 6
-			path: ../../tests/Feature/PlatformAdmin/AppendAuditEntryTest.php
-
-		-
-			message: '#^`AuditEntry \$fresh` should be named `\$auditEntry` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/AppendAuditEntryTest.php
-
-		-
-			message: '#^`QueryException \$e` should be named `\$queryException` \(coding\-conventions §2\.26\)\.$#'
-			identifier: lesily.variableName
-			count: 1
-			path: ../../tests/Feature/PlatformAdmin/AppendAuditEntryTest.php
-
-		-
 			message: '#^`ApiErrorCode \$expected` should be named `\$apiErrorCode` \(coding\-conventions §2\.26\)\.$#'
 			identifier: lesily.variableName
 			count: 1
