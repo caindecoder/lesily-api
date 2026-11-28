@@ -28,7 +28,7 @@ class FixtureAggregate extends AggregateRoot
         return $this->thingCount;
     }
 
-    protected function applyFixtureThingHappened(FixtureThingHappened $event): void
+    protected function applyFixtureThingHappened(FixtureThingHappened $fixtureThingHappened): void
     {
         $this->thingCount++;
     }

@@ -49,7 +49,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         // Given one refusal on record, and an access log that refuses updates
         $this->refuseAnonymously();
         $this->failAccessLogUpdates();
-        $logged = $this->collectLogRecords();
+        $loggedArrayObject = $this->collectLogRecords();
 
         // When the same refusal arrives again
         $response = $this->refuseAnonymously();
@@ -57,7 +57,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         // Then the refusal still answers, the row still counts one, and the lost count is reported
         $response->assertUnauthorized();
         $this->assertCountedRows([1]);
-        $this->assertWriteFailureReported($logged, ['event' => 'unauthenticated', 'user_id' => null]);
+        $this->assertWriteFailureReported($loggedArrayObject, ['event' => 'unauthenticated', 'user_id' => null]);
     }
 
     #[Test]
@@ -198,7 +198,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         // Given one refusal on record, a second short of five minutes ago
         $this->freezeTime();
         $this->refuseAnonymously();
-        $before = AccessLogEntry::query()->sole();
+        $accessLogEntry = AccessLogEntry::query()->sole();
         $this->travel(299)->seconds();
 
         // When the same refusal arrives again
@@ -206,7 +206,7 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
 
         // Then the one row counts both, and only its count and last sighting moved
         $response->assertUnauthorized();
-        $this->assertCountedAgain($before);
+        $this->assertCountedAgain($accessLogEntry);
     }
 
     /**
@@ -253,13 +253,13 @@ class FoldRepeatedRefusalsTest extends FoundationTestCase
         $this->assertSame($occurrences, AccessLogEntry::query()->orderBy('first_seen_at')->pluck('occurrences')->all());
     }
 
-    protected function assertCountedAgain(AccessLogEntry $before): void
+    protected function assertCountedAgain(AccessLogEntry $beforeAccessLogEntry): void
     {
-        $after = AccessLogEntry::query()->sole();
-        $unchanged = fn (AccessLogEntry $entry): array => Arr::except($entry->getAttributes(), ['occurrences', 'last_seen_at']);
+        $afterAccessLogEntry = AccessLogEntry::query()->sole();
+        $unchanged = fn (AccessLogEntry $accessLogEntry): array => Arr::except($accessLogEntry->getAttributes(), ['occurrences', 'last_seen_at']);
 
-        $this->assertSame(2, $after->occurrences);
-        $this->assertSame(now()->toDateTimeString(), $after->last_seen_at->toDateTimeString());
-        $this->assertSame($unchanged($before), $unchanged($after));
+        $this->assertSame(2, $afterAccessLogEntry->occurrences);
+        $this->assertSame(now()->toDateTimeString(), $afterAccessLogEntry->last_seen_at->toDateTimeString());
+        $this->assertSame($unchanged($beforeAccessLogEntry), $unchanged($afterAccessLogEntry));
     }
 }
