@@ -42,7 +42,7 @@ class User extends AggregateRoot
 
     protected bool $googleLinked = false;
 
-    public function createOwner(string $companyId, RegisterOwnerCommand $command): static
+    public function createOwner(string $companyId, RegisterOwnerCommand $registerOwnerCommand): static
     {
         if ($this->registered) {
             throw UserAlreadyRegisteredException::withId($this->uuid());
@@ -52,10 +52,10 @@ class User extends AggregateRoot
             ->recordThat(new UserSignedUpAsOwner(
                 userId: $this->uuid(),
                 companyId: $companyId,
-                companyName: $command->companyName,
-                email: $command->email,
-                name: $command->name,
-                passwordHash: Hash::make($command->password),
+                companyName: $registerOwnerCommand->companyName,
+                email: $registerOwnerCommand->email,
+                name: $registerOwnerCommand->name,
+                passwordHash: Hash::make($registerOwnerCommand->password),
             ));
     }
 
@@ -66,30 +66,30 @@ class User extends AggregateRoot
      * inviting company so the PDPA event-store walk can attribute why this
      * account exists.
      */
-    public function createFromInvitation(CreateUserFromInvitationCommand $command): static
+    public function createFromInvitation(CreateUserFromInvitationCommand $createUserFromInvitationCommand): static
     {
         if ($this->registered) {
             throw UserAlreadyRegisteredException::withId($this->uuid());
         }
 
-        return $this->forCompany($command->company->getKey())
+        return $this->forCompany($createUserFromInvitationCommand->company->getKey())
             ->recordThat(new UserCreatedFromInvitation(
                 userId: $this->uuid(),
-                email: $command->email,
-                name: $command->name,
-                passwordHash: $command->passwordHash,
+                email: $createUserFromInvitationCommand->email,
+                name: $createUserFromInvitationCommand->name,
+                passwordHash: $createUserFromInvitationCommand->passwordHash,
             ));
     }
 
-    public function setEmergencyContact(string $companyId, SetEmergencyContactCommand $command): static
+    public function setEmergencyContact(string $companyId, SetEmergencyContactCommand $setEmergencyContactCommand): static
     {
         return $this->forCompany($companyId)->recordThat(new UserMembershipEmergencyContactSet(
             userId: $this->uuid(),
             companyId: $companyId,
-            encryptedName: Crypt::encryptString($command->name),
-            encryptedEmail: Crypt::encryptString($command->email),
-            encryptedPhone: Crypt::encryptString($command->phone),
-            encryptedRelationship: Crypt::encryptString($command->relationship->value),
+            encryptedName: Crypt::encryptString($setEmergencyContactCommand->name),
+            encryptedEmail: Crypt::encryptString($setEmergencyContactCommand->email),
+            encryptedPhone: Crypt::encryptString($setEmergencyContactCommand->phone),
+            encryptedRelationship: Crypt::encryptString($setEmergencyContactCommand->relationship->value),
         ));
     }
 
@@ -215,48 +215,48 @@ class User extends AggregateRoot
      *
      * @param  list<string>  $changedFields
      */
-    public function updateProfile(UpdateUserProfileCommand $command, array $changedFields): static
+    public function updateProfile(UpdateUserProfileCommand $updateUserProfileCommand, array $changedFields): static
     {
         return $this->recordThat(new UserProfileUpdated(
             userId: $this->uuid(),
-            name: $command->name,
-            locale: $command->locale->value,
+            name: $updateUserProfileCommand->name,
+            locale: $updateUserProfileCommand->locale->value,
             changedFields: $changedFields,
             updatedAt: CarbonImmutable::now(),
         ));
     }
 
-    protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    protected function applyUserSignedUpAsOwner(UserSignedUpAsOwner $userSignedUpAsOwner): void
     {
         $this->registered = true;
     }
 
-    protected function applyUserCreatedFromInvitation(UserCreatedFromInvitation $event): void
+    protected function applyUserCreatedFromInvitation(UserCreatedFromInvitation $userCreatedFromInvitation): void
     {
         $this->registered = true;
     }
 
-    protected function applyUserEmailVerified(UserEmailVerified $event): void
+    protected function applyUserEmailVerified(UserEmailVerified $userEmailVerified): void
     {
         $this->verified = true;
     }
 
-    protected function applyUser2FAEnabled(User2FAEnabled $event): void
+    protected function applyUser2FAEnabled(User2FAEnabled $user2FAEnabled): void
     {
         $this->twoFactorEnabled = true;
     }
 
-    protected function applyUser2FADisabled(User2FADisabled $event): void
+    protected function applyUser2FADisabled(User2FADisabled $user2FADisabled): void
     {
         $this->twoFactorEnabled = false;
     }
 
-    protected function applyUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
+    protected function applyUserGoogleOAuthLinked(UserGoogleOAuthLinked $userGoogleOAuthLinked): void
     {
         $this->googleLinked = true;
     }
 
-    protected function applyUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
+    protected function applyUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $userGoogleOAuthUnlinked): void
     {
         $this->googleLinked = false;
     }

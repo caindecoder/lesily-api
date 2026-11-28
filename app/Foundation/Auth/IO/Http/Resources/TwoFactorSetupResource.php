@@ -13,7 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class TwoFactorSetupResource extends JsonResource
 {
-    public function __construct(private readonly TwoFactorSetup $setup) {}
+    public function __construct(private readonly TwoFactorSetup $twoFactorSetup) {}
 
     /**
      * @return array<string, string>
@@ -21,8 +21,8 @@ class TwoFactorSetupResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'otpauth_uri' => $this->setup->otpauthUri,
-            'secret' => $this->setup->secret,
+            'otpauth_uri' => $this->twoFactorSetup->otpauthUri,
+            'secret' => $this->twoFactorSetup->secret,
         ];
     }
 }

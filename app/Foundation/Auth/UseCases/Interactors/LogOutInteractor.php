@@ -15,11 +15,11 @@ use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
  */
 class LogOutInteractor
 {
-    public function __construct(private readonly AccessLogRecorder $accessLog) {}
+    public function __construct(private readonly AccessLogRecorder $accessLogRecorder) {}
 
     public function execute(User $user): void
     {
         $user->currentAccessToken()->delete();
-        $this->accessLog->note(AccessEvent::LoggedOut, null, $user);
+        $this->accessLogRecorder->note(AccessEvent::LoggedOut, null, $user);
     }
 }

@@ -13,8 +13,8 @@ use App\Foundation\Auth\UseCases\Commands\ForgotPasswordCommand;
  */
 class ForgotPasswordInteractor
 {
-    public function execute(ForgotPasswordCommand $command): void
+    public function execute(ForgotPasswordCommand $forgotPasswordCommand): void
     {
-        Password::broker()->sendResetLink(['email' => $command->email]);
+        Password::broker()->sendResetLink(['email' => $forgotPasswordCommand->email]);
     }
 }

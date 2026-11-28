@@ -16,30 +16,30 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
 trait InducesProjectorFailures
 {
     /**
-     * Register a projector that throws $failure when $eventClass is dispatched
+     * Register a projector that throws $throwable when $eventClass is dispatched
      * (weight 1000 — AFTER the real projectors, so their writes happen and the
      * rollback is proven against them). Register AFTER the arrange: the handler
      * matches every stored event and filters by class in the body.
      */
-    protected function induceProjectorFailureFor(string $eventClass, ?Throwable $failure = null): void
+    protected function induceProjectorFailureFor(string $eventClass, ?Throwable $throwable = null): void
     {
         $projector = new class extends Projector
         {
             public string $targetEventClass = '';
 
-            public ?Throwable $failure = null;
+            public ?Throwable $throwable = null;
 
             public int $weight = 1000;
 
-            public function onStoredEvent(ShouldBeStored $event): void
+            public function onStoredEvent(ShouldBeStored $shouldBeStored): void
             {
-                if ($event::class === $this->targetEventClass) {
-                    throw $this->failure ?? new RuntimeException('Induced projector failure');
+                if ($shouldBeStored::class === $this->targetEventClass) {
+                    throw $this->throwable ?? new RuntimeException('Induced projector failure');
                 }
             }
         };
         $projector->targetEventClass = $eventClass;
-        $projector->failure = $failure;
+        $projector->throwable = $throwable;
 
         // The projectionist re-resolves handlers from the container by class
         // name on every call; without this instance binding the dispatch would

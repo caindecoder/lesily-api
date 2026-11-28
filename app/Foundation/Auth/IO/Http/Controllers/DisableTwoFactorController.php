@@ -20,17 +20,17 @@ use App\Foundation\Auth\UseCases\Interactors\DisableTwoFactorInteractor;
  */
 class DisableTwoFactorController extends Controller
 {
-    public function __invoke(Request $request, DisableTwoFactorInteractor $interactor): Response
+    public function __invoke(Request $request, DisableTwoFactorInteractor $disableTwoFactorInteractor): Response
     {
-        $command = DisableTwoFactorCommand::validateAndCreate($request);
+        $disableTwoFactorCommand = DisableTwoFactorCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        /** @var PersonalAccessToken $current */
-        $current = $user->currentAccessToken();
+        /** @var PersonalAccessToken $currentPersonalAccessToken */
+        $currentPersonalAccessToken = $user->currentAccessToken();
 
-        $interactor->execute($user, $command, new CurrentSession($current->getKey(), RequestOrigin::fromRequest($request)));
+        $disableTwoFactorInteractor->execute($user, $disableTwoFactorCommand, new CurrentSession($currentPersonalAccessToken->getKey(), RequestOrigin::fromRequest($request)));
 
         return response()->noContent();
     }

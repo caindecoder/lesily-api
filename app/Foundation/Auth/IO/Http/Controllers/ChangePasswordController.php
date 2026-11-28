@@ -20,17 +20,17 @@ use App\Foundation\Auth\UseCases\Interactors\ChangePasswordInteractor;
  */
 class ChangePasswordController extends Controller
 {
-    public function __invoke(Request $request, ChangePasswordInteractor $interactor): Response
+    public function __invoke(Request $request, ChangePasswordInteractor $changePasswordInteractor): Response
     {
-        $command = ChangePasswordCommand::validateAndCreate($request);
+        $changePasswordCommand = ChangePasswordCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        /** @var PersonalAccessToken $current */
-        $current = $user->currentAccessToken();
+        /** @var PersonalAccessToken $currentPersonalAccessToken */
+        $currentPersonalAccessToken = $user->currentAccessToken();
 
-        $interactor->execute($user, $command, new CurrentSession($current->getKey(), RequestOrigin::fromRequest($request)));
+        $changePasswordInteractor->execute($user, $changePasswordCommand, new CurrentSession($currentPersonalAccessToken->getKey(), RequestOrigin::fromRequest($request)));
 
         return response()->noContent();
     }

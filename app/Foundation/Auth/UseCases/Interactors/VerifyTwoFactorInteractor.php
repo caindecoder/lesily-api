@@ -32,28 +32,28 @@ use App\Foundation\Auth\Exceptions\TwoFactorVerificationFailedException;
 class VerifyTwoFactorInteractor
 {
     public function __construct(
-        private readonly LoginChallengeStore $challenges,
-        private readonly TotpVerifier $totp,
-        private readonly SignInFinisher $finisher,
+        private readonly LoginChallengeStore $loginChallengeStore,
+        private readonly TotpVerifier $totpVerifier,
+        private readonly SignInFinisher $signInFinisher,
         private readonly DeviceLimitGuard $deviceLimitGuard,
-        private readonly AccessLogRecorder $accessLog,
+        private readonly AccessLogRecorder $accessLogRecorder,
     ) {}
 
-    public function execute(VerifyTwoFactorCommand $command): SessionIssued
+    public function execute(VerifyTwoFactorCommand $verifyTwoFactorCommand): SessionIssued
     {
-        $challenge = $this->challenges->find($command->challengeId);
+        $twoFactorChallenge = $this->loginChallengeStore->find($verifyTwoFactorCommand->challengeId);
 
-        if ($challenge === null) {
-            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
+        if ($twoFactorChallenge === null) {
+            $this->accessLogRecorder->note(AccessEvent::LoginFailed, AccessEventReason::ChallengeExpired, null);
 
             throw new LoginChallengeNotFoundException;
         }
 
-        $user = User::query()->findOrFail($challenge->userId);
+        $user = User::query()->findOrFail($twoFactorChallenge->userId);
 
         // A pending link meets an unlink made during the challenge (G12): refused before a factor is spent.
-        if ($challenge->pendingGoogleSubjectId !== null && $user->google_unlinked_at !== null) {
-            $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $user);
+        if ($twoFactorChallenge->pendingGoogleSubjectId !== null && $user->google_unlinked_at !== null) {
+            $this->accessLogRecorder->note(AccessEvent::LoginFailed, AccessEventReason::GoogleUnlinked, $user);
 
             throw new GoogleSignInUnlinkedException;
         }
@@ -63,33 +63,33 @@ class VerifyTwoFactorInteractor
         // recovery code; the challenge survives, re-verifiable once a device is freed.
         $this->deviceLimitGuard->enforce($user);
 
-        if ($this->totp->verify((string) $user->two_factor_secret, $command->code)) {
-            $this->challenges->forget($command->challengeId);
+        if ($this->totpVerifier->verify((string) $user->two_factor_secret, $verifyTwoFactorCommand->code)) {
+            $this->loginChallengeStore->forget($verifyTwoFactorCommand->challengeId);
 
-            return $this->finish(new PendingSession($user, $command->deviceName), $challenge->pendingGoogleSubjectId);
+            return $this->finish(new PendingSession($user, $verifyTwoFactorCommand->deviceName), $twoFactorChallenge->pendingGoogleSubjectId);
         }
 
-        if ($this->consumeMatchingRecoveryCode($user, $command->code)) {
-            $this->challenges->forget($command->challengeId);
+        if ($this->consumeMatchingRecoveryCode($user, $verifyTwoFactorCommand->code)) {
+            $this->loginChallengeStore->forget($verifyTwoFactorCommand->challengeId);
 
-            return $this->finish(new PendingSession($user, $command->deviceName, AccessEventReason::RecoveryCode), $challenge->pendingGoogleSubjectId);
+            return $this->finish(new PendingSession($user, $verifyTwoFactorCommand->deviceName, AccessEventReason::RecoveryCode), $twoFactorChallenge->pendingGoogleSubjectId);
         }
 
-        $this->challenges->recordFailure($command->challengeId);
-        $this->accessLog->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
+        $this->loginChallengeStore->recordFailure($verifyTwoFactorCommand->challengeId);
+        $this->accessLogRecorder->note(AccessEvent::LoginFailed, AccessEventReason::WrongTwoFactorCode, $user);
 
         throw new TwoFactorVerificationFailedException;
     }
 
     /** A first-time Google link pending in the challenge commits with the session (G13). */
-    protected function finish(PendingSession $pending, ?string $googleSubjectToLink): SessionIssued
+    protected function finish(PendingSession $pendingSession, ?string $googleSubjectToLink): SessionIssued
     {
-        return DB::transaction(function () use ($pending, $googleSubjectToLink): SessionIssued {
+        return DB::transaction(function () use ($pendingSession, $googleSubjectToLink): SessionIssued {
             if ($googleSubjectToLink !== null) {
-                UserAggregate::retrieve($pending->user->getKey())->linkGoogleOAuth($googleSubjectToLink)->persist();
+                UserAggregate::retrieve($pendingSession->user->getKey())->linkGoogleOAuth($googleSubjectToLink)->persist();
             }
 
-            return $this->finisher->finish($pending);
+            return $this->signInFinisher->finish($pendingSession);
         });
     }
 

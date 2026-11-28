@@ -24,14 +24,14 @@ use App\Foundation\Notifications\Notifications\SystemNotification;
  */
 class PasswordChangedNotificationReactor extends Reactor implements ShouldQueue
 {
-    public function onUserPasswordChanged(UserPasswordChanged $event): void
+    public function onUserPasswordChanged(UserPasswordChanged $userPasswordChanged): void
     {
-        $this->sendConfirmationTo($event->userId);
+        $this->sendConfirmationTo($userPasswordChanged->userId);
     }
 
-    public function onUserPasswordReset(UserPasswordReset $event): void
+    public function onUserPasswordReset(UserPasswordReset $userPasswordReset): void
     {
-        $this->sendConfirmationTo($event->userId);
+        $this->sendConfirmationTo($userPasswordReset->userId);
     }
 
     protected function sendConfirmationTo(string $userId): void

@@ -49,12 +49,12 @@ class LogoutAllTest extends AuthTestCase
     {
         // Given a user with three active sessions (the current one plus two others)
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
 
         // When they confirm logout-all with the wrong password
-        $response = $this->logoutAll($current->plainTextToken, 'not-my-password');
+        $response = $this->logoutAll($currentNewAccessToken->plainTextToken, 'not-my-password');
 
         // Then it is refused and all three sessions remain intact
         $this->assertRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
@@ -88,19 +88,19 @@ class LogoutAllTest extends AuthTestCase
     public function when_a_user_logs_out_all_then_other_users_sessions_remain_active(): void
     {
         // Given Alice (with a second device) and Bob, each holding active sessions
-        $alice = $this->aRegisteredUser();
-        $aliceCurrent = $this->aSessionFor($alice, 'web');
-        $this->aSessionFor($alice, 'mobile');
+        $user = $this->aRegisteredUser();
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $this->aSessionFor($user, 'mobile');
 
-        $bob = $this->aRegisteredUser('bob@contoso.lk');
-        $bobToken = $this->aSessionFor($bob, 'web');
-        $this->aSessionFor($bob, 'mobile');
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
+        $otherUserNewAccessToken = $this->aSessionFor($otherUser, 'web');
+        $this->aSessionFor($otherUser, 'mobile');
 
         // When Alice logs out all her other devices with her correct password
-        $this->logoutAll($aliceCurrent->plainTextToken, self::LOGIN_PASSWORD)->assertOk();
+        $this->logoutAll($currentNewAccessToken->plainTextToken, self::LOGIN_PASSWORD)->assertOk();
 
         // Then Bob's sessions are wholly untouched
-        $this->assertSessionsIntact($bob, $bobToken->plainTextToken, 2);
+        $this->assertSessionsIntact($otherUser, $otherUserNewAccessToken->plainTextToken, 2);
     }
 
     // Edge — a user whose only session is the current one has nothing else to revoke: logout-all
@@ -110,13 +110,13 @@ class LogoutAllTest extends AuthTestCase
     {
         // Given a user holding exactly one (current) session
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
 
         // When they log out all other devices with the correct password
-        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+        $response = $this->logoutAll($currentNewAccessToken->plainTextToken, self::LOGIN_PASSWORD);
 
         // Then nothing is revoked and their current session still authenticates
-        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 0);
+        $this->assertOnlyCurrentSurvives($response, $currentNewAccessToken->plainTextToken, 0);
     }
 
     // Edge — revoke is expiry-agnostic: logout-all deletes EVERY other session row the user owns,
@@ -128,18 +128,18 @@ class LogoutAllTest extends AuthTestCase
     {
         // Given a user with the current session, one live other device, and one expired (unpruned) row
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
-        $liveOther = $this->aSessionFor($user, 'mobile');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
+        $liveOtherNewAccessToken = $this->aSessionFor($user, 'mobile');
         $this->anExpiredSessionFor($user, 'old-laptop');
 
         // When they log out all other devices with the correct password
-        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+        $response = $this->logoutAll($currentNewAccessToken->plainTextToken, self::LOGIN_PASSWORD);
 
         // Then both other rows (live + expired) are revoked and counted, only the current remains,
         // and the live other device no longer authenticates
-        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 2);
+        $this->assertOnlyCurrentSurvives($response, $currentNewAccessToken->plainTextToken, 2);
         $this->assertSessionsPreserved($user, 1);
-        $this->assertUnauthenticated($this->probeWith($liveOther->plainTextToken));
+        $this->assertUnauthenticated($this->probeWith($liveOtherNewAccessToken->plainTextToken));
     }
 
     // Happy — the core flow: a user with several devices confirms with the correct password and
@@ -149,16 +149,16 @@ class LogoutAllTest extends AuthTestCase
     {
         // Given a user with four active sessions: the current one plus three others
         $user = $this->aRegisteredUser();
-        $current = $this->aSessionFor($user, 'web');
+        $currentNewAccessToken = $this->aSessionFor($user, 'web');
         $this->aSessionFor($user, 'mobile');
         $this->aSessionFor($user, 'tablet');
         $this->aSessionFor($user, 'laptop');
 
         // When they log out all other devices with the correct password
-        $response = $this->logoutAll($current->plainTextToken, self::LOGIN_PASSWORD);
+        $response = $this->logoutAll($currentNewAccessToken->plainTextToken, self::LOGIN_PASSWORD);
 
         // Then the three other sessions are revoked and only the current one remains
-        $this->assertOnlyCurrentSurvives($response, $current->plainTextToken, 3);
+        $this->assertOnlyCurrentSurvives($response, $currentNewAccessToken->plainTextToken, 3);
         $this->assertSessionsPreserved($user, 1);
     }
 

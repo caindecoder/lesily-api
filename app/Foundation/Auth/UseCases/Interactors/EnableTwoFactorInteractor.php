@@ -15,7 +15,7 @@ use App\Foundation\Auth\Exceptions\TwoFactorAlreadyEnabledException;
  */
 class EnableTwoFactorInteractor
 {
-    public function __construct(private readonly TotpVerifier $totp) {}
+    public function __construct(private readonly TotpVerifier $totpVerifier) {}
 
     public function execute(User $user): TwoFactorSetup
     {
@@ -23,13 +23,13 @@ class EnableTwoFactorInteractor
             throw new TwoFactorAlreadyEnabledException;
         }
 
-        $secret = $this->totp->generateSecret();
+        $secret = $this->totpVerifier->generateSecret();
 
         Cache::put("2fa-setup:{$user->getKey()}", $secret, now()->addMinutes(10));
 
         return new TwoFactorSetup(
             secret: $secret,
-            otpauthUri: $this->totp->provisioningUri($secret, $user->email),
+            otpauthUri: $this->totpVerifier->provisioningUri($secret, $user->email),
         );
     }
 }

@@ -27,10 +27,10 @@ trait InducesDatabaseFailures
      */
     protected function syntheticQueryException(array $failure): QueryException
     {
-        $driverError = new PDOException($failure['message']);
-        $driverError->errorInfo = [$failure['sqlstate'], $failure['code'], $failure['message']];
+        $driverPDOException = new PDOException($failure['message']);
+        $driverPDOException->errorInfo = [$failure['sqlstate'], $failure['code'], $failure['message']];
 
-        return new QueryException('mysql', 'select 1 for update', [], $driverError);
+        return new QueryException('mysql', 'select 1 for update', [], $driverPDOException);
     }
 
     /**

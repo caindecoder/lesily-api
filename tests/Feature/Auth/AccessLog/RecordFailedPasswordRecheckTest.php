@@ -28,8 +28,8 @@ class RecordFailedPasswordRecheckTest extends AuthTestCase
 
         // Then a failed re-check is logged against them
         $response->assertUnauthorized();
-        $entry = $this->assertAccessLogged(AccessEvent::ReauthFailed, AccessEventReason::WrongPassword, $user);
-        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
+        $accessLogEntry = $this->assertAccessLogged(AccessEvent::ReauthFailed, AccessEventReason::WrongPassword, $user);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::IncorrectPassword);
     }
 
     #[Test]

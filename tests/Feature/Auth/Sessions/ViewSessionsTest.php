@@ -34,9 +34,9 @@ class ViewSessionsTest extends AuthTestCase
     {
         // Given two users, each holding an active session
         $viewer = $this->aRegisteredUser();
-        $other = $this->aRegisteredUser('bob@contoso.lk');
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
         $viewerToken = $this->aSessionFor($viewer)->plainTextToken;
-        $foreignTokenId = $this->aSessionFor($other, 'mobile')->accessToken->getKey();
+        $foreignTokenId = $this->aSessionFor($otherUser, 'mobile')->accessToken->getKey();
 
         // When the viewer lists their active sessions
         $response = $this->listSessions($viewerToken);
@@ -91,14 +91,14 @@ class ViewSessionsTest extends AuthTestCase
     {
         // Given a user holding two active sessions
         $user = $this->aRegisteredUser();
-        $currentSession = $this->aSessionFor($user);
+        $currentNewAccessToken = $this->aSessionFor($user);
         $this->aSessionFor($user, 'mobile');
 
         // When they list their sessions using one of those tokens
-        $response = $this->listSessions($currentSession->plainTextToken);
+        $response = $this->listSessions($currentNewAccessToken->plainTextToken);
 
         // Then only the requesting token is flagged as the current session
-        $this->assertExactlyCurrentSession($response, $currentSession->accessToken->getKey());
+        $this->assertExactlyCurrentSession($response, $currentNewAccessToken->accessToken->getKey());
     }
 
     // Happy — a session is listed with its full row shape: id, the device it was minted
@@ -113,15 +113,15 @@ class ViewSessionsTest extends AuthTestCase
         $this->travelTo(now()->startOfSecond());
         $user = $this->aRegisteredUser();
         $deviceName = 'Chrome on Windows';
-        $session = $this->aSessionFor($user, $deviceName);
+        $newAccessToken = $this->aSessionFor($user, $deviceName);
 
         // When they list their active sessions — minted earlier, listed now, so
         // last_used_at (stamped at list time) is provably distinct from created_at.
         $this->travel(5)->minutes();
-        $response = $this->listSessions($session->plainTextToken);
+        $response = $this->listSessions($newAccessToken->plainTextToken);
 
         // Then the row carries its id, device, last-active time, and current flag
-        $this->assertSessionListed($response, $session->accessToken->getKey(), $deviceName);
+        $this->assertSessionListed($response, $newAccessToken->accessToken->getKey(), $deviceName);
     }
 
     protected function listSessions(string $token): TestResponse
@@ -135,11 +135,11 @@ class ViewSessionsTest extends AuthTestCase
      */
     protected function aSessionPredatingTheWindow(User $user, string $name): NewAccessToken
     {
-        $session = $user->createToken($name); // null expires_at — relies on the global window
+        $newAccessToken = $user->createToken($name); // null expires_at — relies on the global window
         $window = Config::integer('sanctum.expiration');
-        $session->accessToken->forceFill(['created_at' => now()->subMinutes($window + 1)])->save();
+        $newAccessToken->accessToken->forceFill(['created_at' => now()->subMinutes($window + 1)])->save();
 
-        return $session;
+        return $newAccessToken;
     }
 
     /**

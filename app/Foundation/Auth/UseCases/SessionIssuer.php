@@ -23,8 +23,8 @@ class SessionIssuer
         // Stamp the 90-day expiry explicitly so the column (and the returned expiresAt) is
         // authoritative — createToken leaves it null otherwise, and config('sanctum.expiration')
         // only governs the auth-time check.
-        $token = $user->createToken($deviceName, expiresAt: now()->addMinutes(Config::integer('sanctum.expiration')));
+        $newAccessToken = $user->createToken($deviceName, expiresAt: now()->addMinutes(Config::integer('sanctum.expiration')));
 
-        return new IssuedSession($token->plainTextToken, $token->accessToken->expires_at);
+        return new IssuedSession($newAccessToken->plainTextToken, $newAccessToken->accessToken->expires_at);
     }
 }

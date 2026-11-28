@@ -13,7 +13,7 @@ use App\Foundation\Http\Responses\ApiErrorCode;
  */
 class RegistrationConflictException extends RuntimeException
 {
-    private function __construct(public readonly ApiErrorCode $errorCode, string $message)
+    private function __construct(public readonly ApiErrorCode $apiErrorCode, string $message)
     {
         parent::__construct($message);
     }

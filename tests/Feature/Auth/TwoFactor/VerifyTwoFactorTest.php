@@ -289,9 +289,9 @@ class VerifyTwoFactorTest extends AuthTestCase
         // forgetGuards so the probe re-resolves the new token from scratch — the
         // container-cached guard would otherwise answer from the test's prior state.
         Auth::forgetGuards();
-        $probe = $this->withToken($token)->getJson('/api/_test/authenticated-probe');
-        $probe->assertOk();
-        $probe->assertJsonPath('user_id', $user->getKey());
+        $probeResponse = $this->withToken($token)->getJson('/api/_test/authenticated-probe');
+        $probeResponse->assertOk();
+        $probeResponse->assertJsonPath('user_id', $user->getKey());
     }
 
     protected function assertNoEventRecorded(): void

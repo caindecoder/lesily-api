@@ -212,18 +212,18 @@ class ForgotPasswordTest extends AuthTestCase
         Notification::assertSentTo(
             $user,
             PasswordResetLinkNotification::class,
-            function (PasswordResetLinkNotification $notification) use ($user): bool {
-                $mail = $notification->toMail($user);
+            function (PasswordResetLinkNotification $passwordResetLinkNotification) use ($user): bool {
+                $mailMessage = $passwordResetLinkNotification->toMail($user);
 
-                return $notification->token !== ''
-                    && $notification->via($user) === ['mail']
-                    && $mail->subject === 'Reset your password'
-                    && is_string($mail->actionUrl)
+                return $passwordResetLinkNotification->token !== ''
+                    && $passwordResetLinkNotification->via($user) === ['mail']
+                    && $mailMessage->subject === 'Reset your password'
+                    && is_string($mailMessage->actionUrl)
                     && str_contains(
-                        $mail->actionUrl,
-                        '/reset-password?token='.$notification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
+                        $mailMessage->actionUrl,
+                        '/reset-password?token='.$passwordResetLinkNotification->token.'&email='.urlencode($user->getEmailForPasswordReset()),
                     )
-                    && str_contains(implode(' ', $mail->outroLines), '60 minutes');
+                    && str_contains(implode(' ', $mailMessage->outroLines), '60 minutes');
             },
         );
         $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);

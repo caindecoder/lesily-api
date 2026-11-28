@@ -44,12 +44,12 @@ class CreateOwnerTest extends AuthTestCase
     public function when_a_user_genesis_is_replayed_then_the_second_sign_up_is_rejected(): void
     {
         // Given a user who already signed up as owner
-        $command = $this->buildRegisterOwnerCommand();
-        User::retrieve($this->userId)->createOwner($this->companyId, $command)->persist();
+        $registerOwnerCommand = $this->buildRegisterOwnerCommand();
+        User::retrieve($this->userId)->createOwner($this->companyId, $registerOwnerCommand)->persist();
 
         // When the same user signs up again
         try {
-            User::retrieve($this->userId)->createOwner($this->companyId, $command);
+            User::retrieve($this->userId)->createOwner($this->companyId, $registerOwnerCommand);
             $this->fail('Replaying the owner genesis must be rejected.');
         } catch (UserAlreadyRegisteredException) {
             // Then it is rejected and the original genesis is untouched
@@ -66,57 +66,57 @@ class CreateOwnerTest extends AuthTestCase
     public function when_an_owner_signs_up_then_the_genesis_is_stored_and_projected_honouring_the_user_model_contract(): void
     {
         // Given an owner-signup command for a new user
-        $command = $this->buildRegisterOwnerCommand();
+        $registerOwnerCommand = $this->buildRegisterOwnerCommand();
 
         // When the owner signs up and the genesis is persisted (the projector runs synchronously)
-        User::retrieve($this->userId)->createOwner($this->companyId, $command)->persist();
+        User::retrieve($this->userId)->createOwner($this->companyId, $registerOwnerCommand)->persist();
 
         // Then the write side stores exactly one genesis event, scoped to the
         // company, recording the owner with a hashed password...
         $this->assertSame(1, LesilyStoredEvent::query()->whereForCompany($this->companyId)->count());
 
-        $genesis = LesilyStoredEvent::query()->whereForCompany($this->companyId)
+        $eloquentStoredEvent = LesilyStoredEvent::query()->whereForCompany($this->companyId)
             ->where('event_class', UserSignedUpAsOwner::class)->sole();
 
-        $this->assertGenesisEventRecordsTheOwner($genesis, $command);
-        $this->assertPasswordHashedNeverPlaintext($genesis, $command);
+        $this->assertGenesisEventRecordsTheOwner($eloquentStoredEvent, $registerOwnerCommand);
+        $this->assertPasswordHashedNeverPlaintext($eloquentStoredEvent, $registerOwnerCommand);
 
         // ...and the read side projects the users row honouring the model contract
-        $row = UserReadModel::findOrFail($this->userId);
+        $owner = UserReadModel::findOrFail($this->userId);
 
-        $this->assertOwnerIdentityProjected($row, $command);
-        $this->assertOwnerProjectedHonouringModelContract($row);
+        $this->assertOwnerIdentityProjected($owner, $registerOwnerCommand);
+        $this->assertOwnerProjectedHonouringModelContract($owner);
     }
 
-    protected function assertGenesisEventRecordsTheOwner(EloquentStoredEvent $event, RegisterOwnerCommand $command): void
+    protected function assertGenesisEventRecordsTheOwner(EloquentStoredEvent $eloquentStoredEvent, RegisterOwnerCommand $registerOwnerCommand): void
     {
-        $this->assertSame($this->userId, $event->event_properties['userId']);
-        $this->assertSame($this->companyId, $event->event_properties['companyId']);
-        $this->assertSame($command->name, $event->event_properties['name']);
-        $this->assertSame($command->email, $event->event_properties['email']);
-        $this->assertSame($command->companyName, $event->event_properties['companyName']);
+        $this->assertSame($this->userId, $eloquentStoredEvent->event_properties['userId']);
+        $this->assertSame($this->companyId, $eloquentStoredEvent->event_properties['companyId']);
+        $this->assertSame($registerOwnerCommand->name, $eloquentStoredEvent->event_properties['name']);
+        $this->assertSame($registerOwnerCommand->email, $eloquentStoredEvent->event_properties['email']);
+        $this->assertSame($registerOwnerCommand->companyName, $eloquentStoredEvent->event_properties['companyName']);
     }
 
-    protected function assertPasswordHashedNeverPlaintext(EloquentStoredEvent $event, RegisterOwnerCommand $command): void
+    protected function assertPasswordHashedNeverPlaintext(EloquentStoredEvent $eloquentStoredEvent, RegisterOwnerCommand $registerOwnerCommand): void
     {
-        $this->assertNotSame($command->password, $event->event_properties['passwordHash']);
-        $this->assertTrue(Hash::check($command->password, $event->event_properties['passwordHash']));
+        $this->assertNotSame($registerOwnerCommand->password, $eloquentStoredEvent->event_properties['passwordHash']);
+        $this->assertTrue(Hash::check($registerOwnerCommand->password, $eloquentStoredEvent->event_properties['passwordHash']));
     }
 
-    protected function assertOwnerIdentityProjected(UserReadModel $row, RegisterOwnerCommand $command): void
+    protected function assertOwnerIdentityProjected(UserReadModel $owner, RegisterOwnerCommand $registerOwnerCommand): void
     {
-        $this->assertSame($command->name, $row->name);
-        $this->assertSame($command->email, $row->email);
-        $this->assertTrue(Hash::check($command->password, $row->password));
+        $this->assertSame($registerOwnerCommand->name, $owner->name);
+        $this->assertSame($registerOwnerCommand->email, $owner->email);
+        $this->assertTrue(Hash::check($registerOwnerCommand->password, $owner->password));
     }
 
-    protected function assertOwnerProjectedHonouringModelContract(UserReadModel $row): void
+    protected function assertOwnerProjectedHonouringModelContract(UserReadModel $owner): void
     {
-        $this->assertSame($this->userId, $row->getKey());
-        $this->assertTrue(Str::isUuid($row->getKey()), 'users.id must be a char(36) UUID (ERD-1-01, R-042)');
+        $this->assertSame($this->userId, $owner->getKey());
+        $this->assertTrue(Str::isUuid($owner->getKey()), 'users.id must be a char(36) UUID (ERD-1-01, R-042)');
         // Unverified until the signed link is clicked (UC-1-001 alt-6a); the
         // email_verified_at Carbon-cast pin lives at EmailVerificationTest:80.
-        $this->assertNull($row->email_verified_at);
+        $this->assertNull($owner->email_verified_at);
     }
 
     protected function buildRegisterOwnerCommand(): RegisterOwnerCommand

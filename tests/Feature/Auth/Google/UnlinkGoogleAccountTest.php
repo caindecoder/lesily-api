@@ -16,14 +16,14 @@ use App\Foundation\EventStore\StoredEvents\Models\LesilyStoredEvent;
 
 class UnlinkGoogleAccountTest extends AuthTestCase
 {
-    protected User $alice;
+    protected User $user;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         config(['app.debug' => false]);
-        $this->alice = User::factory()
+        $this->user = User::factory()
             ->withEmail(self::LOGIN_EMAIL)
             ->withPassword(self::LOGIN_PASSWORD)
             ->linkedToGoogle(self::GOOGLE_SUBJECT)
@@ -46,7 +46,7 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_no_idempotency_key_is_sent_then_the_unlink_is_refused(): void
     {
         // Given Alice signed in
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $token = $this->aSessionFor($this->user)->plainTextToken;
 
         // When the unlink carries no Idempotency-Key header
         $response = $this->withToken($token)->deleteJson('/api/v1/me/google', ['password' => self::LOGIN_PASSWORD]);
@@ -62,7 +62,7 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_the_password_is_missing_or_malformed_then_the_unlink_is_rejected(array $payload, string $expectedMessage): void
     {
         // Given Alice signed in
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $token = $this->aSessionFor($this->user)->plainTextToken;
 
         // When she unlinks without a usable password
         $response = $this->unlinkGoogle($token, $payload);
@@ -76,30 +76,30 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_google_is_not_linked_then_the_unlink_is_refused(): void
     {
         // Given Bob, never linked to Google, signed in on two devices
-        $bob = $this->aRegisteredUser('bob@contoso.lk');
-        $token = $this->aSessionFor($bob)->plainTextToken;
-        $this->aSessionFor($bob, 'mobile');
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
+        $token = $this->aSessionFor($otherUser)->plainTextToken;
+        $this->aSessionFor($otherUser, 'mobile');
 
         // When he unlinks Google with his correct password
         $response = $this->unlinkGoogle($token);
 
         // Then there is nothing to unlink, and nothing changes
-        $this->assertNotLinkedRefusal($response, $bob);
+        $this->assertNotLinkedRefusal($response, $otherUser);
     }
 
     #[Test]
     public function when_google_is_not_linked_then_the_password_is_never_checked(): void
     {
         // Given Bob, never linked to Google, signed in on two devices
-        $bob = $this->aRegisteredUser('bob@contoso.lk');
-        $token = $this->aSessionFor($bob)->plainTextToken;
-        $this->aSessionFor($bob, 'mobile');
+        $otherUser = $this->aRegisteredUser('bob@contoso.lk');
+        $token = $this->aSessionFor($otherUser)->plainTextToken;
+        $this->aSessionFor($otherUser, 'mobile');
 
         // When he unlinks Google with a wrong password
         $response = $this->unlinkGoogle($token, ['password' => 'not-my-password']);
 
         // Then the not-linked refusal answers first and no failed re-check is logged
-        $this->assertNotLinkedRefusal($response, $bob);
+        $this->assertNotLinkedRefusal($response, $otherUser);
         $this->assertNoAccessLogged(AccessEvent::ReauthFailed);
     }
 
@@ -107,8 +107,8 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_the_password_is_wrong_then_google_stays_linked(): void
     {
         // Given Alice signed in on two devices
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
-        $this->aSessionFor($this->alice, 'mobile');
+        $token = $this->aSessionFor($this->user)->plainTextToken;
+        $this->aSessionFor($this->user, 'mobile');
 
         // When she unlinks Google with a wrong password
         $response = $this->unlinkGoogle($token, ['password' => 'not-my-password']);
@@ -123,7 +123,7 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_too_many_unlink_attempts_are_made_then_the_request_is_throttled(): void
     {
         // Given Alice spending the shared per-IP auth-tier allowance on wrong passwords
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $token = $this->aSessionFor($this->user)->plainTextToken;
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $this->unlinkGoogle($token, ['password' => 'not-my-password']);
         }
@@ -139,8 +139,8 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_the_projection_fails_then_the_unlink_is_rolled_back(): void
     {
         // Given Alice signed in on two devices, and a failing users projection
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
-        $this->aSessionFor($this->alice, 'mobile');
+        $token = $this->aSessionFor($this->user)->plainTextToken;
+        $this->aSessionFor($this->user, 'mobile');
         $this->induceProjectorFailureFor(UserGoogleOAuthUnlinked::class);
 
         // When she unlinks Google with her password
@@ -155,8 +155,8 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     public function when_google_is_unlinked_then_the_users_other_sessions_are_revoked(): void
     {
         // Given Alice signed in on two devices
-        $current = $this->aSessionFor($this->alice)->plainTextToken;
-        $other = $this->aSessionFor($this->alice, 'mobile')->plainTextToken;
+        $current = $this->aSessionFor($this->user)->plainTextToken;
+        $other = $this->aSessionFor($this->user, 'mobile')->plainTextToken;
 
         // When she unlinks Google with her password on the current device
         $response = $this->unlinkGoogle($current);
@@ -170,7 +170,7 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice signed in and linked to Google
         $this->freezeTime();
-        $token = $this->aSessionFor($this->alice)->plainTextToken;
+        $token = $this->aSessionFor($this->user)->plainTextToken;
 
         // When she unlinks Google with her password
         $response = $this->unlinkGoogle($token);
@@ -192,14 +192,14 @@ class UnlinkGoogleAccountTest extends AuthTestCase
     {
         $response->assertNoContent();
 
-        $stored = $this->alice->fresh();
-        $this->assertNull($stored?->google_id, 'The unlink must clear the Google link.');
-        $this->assertSame(now()->toAtomString(), $stored?->google_unlinked_at?->toAtomString(), 'The unlink must be remembered (G12).');
+        $user = $this->user->fresh();
+        $this->assertNull($user?->google_id, 'The unlink must clear the Google link.');
+        $this->assertSame(now()->toAtomString(), $user?->google_unlinked_at?->toAtomString(), 'The unlink must be remembered (G12).');
 
-        $unlinked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthUnlinked::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthUnlinked::class)->sole();
         $this->assertEquals(
-            ['userId' => $this->alice->getKey(), 'unlinkedAt' => now()->toAtomString()],
-            Arr::only($unlinked->event_properties, ['userId', 'unlinkedAt']),
+            ['userId' => $this->user->getKey(), 'unlinkedAt' => now()->toAtomString()],
+            Arr::only($eloquentStoredEvent->event_properties, ['userId', 'unlinkedAt']),
         );
     }
 
@@ -214,8 +214,8 @@ class UnlinkGoogleAccountTest extends AuthTestCase
 
     protected function assertStillLinked(int $sessions): void
     {
-        $this->assertSame(self::GOOGLE_SUBJECT, $this->alice->fresh()?->google_id, 'A refused unlink must keep the link.');
-        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $this->alice->getKey())->count());
-        $this->assertSame($sessions, $this->alice->tokens()->count(), 'A refused unlink must end no session.');
+        $this->assertSame(self::GOOGLE_SUBJECT, $this->user->fresh()?->google_id, 'A refused unlink must keep the link.');
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $this->user->getKey())->count());
+        $this->assertSame($sessions, $this->user->tokens()->count(), 'A refused unlink must end no session.');
     }
 }

@@ -10,12 +10,12 @@ use App\Foundation\Auth\UseCases\Interactors\ResendVerificationEmailInteractor;
 
 class ResendVerificationEmailController extends Controller
 {
-    public function __invoke(Request $request, ResendVerificationEmailInteractor $interactor): Response
+    public function __invoke(Request $request, ResendVerificationEmailInteractor $resendVerificationEmailInteractor): Response
     {
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user);
+        $resendVerificationEmailInteractor->execute($user);
 
         return response()->noContent();
     }

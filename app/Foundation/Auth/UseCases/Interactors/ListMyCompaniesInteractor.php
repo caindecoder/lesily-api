@@ -16,7 +16,7 @@ use App\Companies\Memberships\UseCases\Repositories\CompanyUserRepositoryInterfa
  */
 class ListMyCompaniesInteractor
 {
-    public function __construct(private readonly CompanyUserRepositoryInterface $memberships) {}
+    public function __construct(private readonly CompanyUserRepositoryInterface $companyUserRepository) {}
 
     /**
      * @return Collection<int, stdClass>
@@ -29,9 +29,9 @@ class ListMyCompaniesInteractor
         // Void block body (not an arrow fn): the closure returns null, so each()
         // never short-circuits — an arrow fn would return the assignment's value,
         // and a non-default row's `= false` would abort the loop mid-list.
-        return $this->memberships->listForUser($user->getKey())
-            ->each(function (stdClass $row) use ($user): void {
-                $row->is_default = $row->id === $user->default_company_id;
+        return $this->companyUserRepository->listForUser($user->getKey())
+            ->each(function (stdClass $stdClass) use ($user): void {
+                $stdClass->is_default = $stdClass->id === $user->default_company_id;
             });
     }
 }

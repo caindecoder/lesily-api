@@ -14,29 +14,29 @@ use App\Foundation\Auth\UseCases\Interactors\UnlinkGoogleAccountInteractor;
 
 class GoogleAccountController extends Controller
 {
-    public function store(Request $request, LinkGoogleAccountInteractor $interactor): Response
+    public function store(Request $request, LinkGoogleAccountInteractor $linkGoogleAccountInteractor): Response
     {
-        $command = LinkGoogleAccountCommand::validateAndCreate($request);
+        $linkGoogleAccountCommand = LinkGoogleAccountCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user, $command);
+        $linkGoogleAccountInteractor->execute($user, $linkGoogleAccountCommand);
 
         return response()->noContent();
     }
 
-    public function destroy(Request $request, UnlinkGoogleAccountInteractor $interactor): Response
+    public function destroy(Request $request, UnlinkGoogleAccountInteractor $unlinkGoogleAccountInteractor): Response
     {
-        $command = UnlinkGoogleAccountCommand::validateAndCreate($request);
+        $unlinkGoogleAccountCommand = UnlinkGoogleAccountCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        /** @var PersonalAccessToken $current */
-        $current = $user->currentAccessToken();
+        /** @var PersonalAccessToken $currentPersonalAccessToken */
+        $currentPersonalAccessToken = $user->currentAccessToken();
 
-        $interactor->execute($user, $command, $current->getKey());
+        $unlinkGoogleAccountInteractor->execute($user, $unlinkGoogleAccountCommand, $currentPersonalAccessToken->getKey());
 
         return response()->noContent();
     }

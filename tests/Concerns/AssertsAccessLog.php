@@ -26,31 +26,31 @@ trait AssertsAccessLog
      * Assert the request left exactly one access-log row, for $user (null when no
      * account was resolved), and return it for the column checks that follow.
      */
-    protected function assertAccessLogged(AccessEvent $event, ?AccessEventReason $reason, ?User $user): AccessLogEntry
+    protected function assertAccessLogged(AccessEvent $accessEvent, ?AccessEventReason $accessEventReason, ?User $user): AccessLogEntry
     {
-        $entry = AccessLogEntry::query()->sole();
+        $accessLogEntry = AccessLogEntry::query()->sole();
 
-        $this->assertSame($event, $entry->event);
-        $this->assertSame($reason, $entry->reason);
-        $this->assertSame($user?->getKey(), $entry->user_id);
+        $this->assertSame($accessEvent, $accessLogEntry->event);
+        $this->assertSame($accessEventReason, $accessLogEntry->reason);
+        $this->assertSame($user?->getKey(), $accessLogEntry->user_id);
 
-        return $entry;
+        return $accessLogEntry;
     }
 
     /**
-     * Assert one $event row for $user in each of $companies — sharing one time, each with its own uuid v7 id.
+     * Assert one $accessEvent row for $user in each of $companies — sharing one time, each with its own uuid v7 id.
      *
      * @param  list<Company>  $companies
      */
-    protected function assertAccessLoggedInEachCompany(AccessEvent $event, User $user, array $companies): void
+    protected function assertAccessLoggedInEachCompany(AccessEvent $accessEvent, User $user, array $companies): void
     {
-        $rows = AccessLogEntry::query()->get();
+        $accessLogEntries = AccessLogEntry::query()->get();
 
-        $this->assertCount(count($companies), $rows);
-        $this->assertEqualsCanonicalizing(array_map(fn (Company $company) => $company->getKey(), $companies), $rows->pluck('company_id')->all());
-        $this->assertCount(1, $rows->map(fn (AccessLogEntry $row): string => $row->first_seen_at->toDateTimeString())->unique());
-        $this->assertSame([[$event, $user->getKey(), true]], $rows->map(fn (AccessLogEntry $row): array => [$row->event, $row->user_id, Str::isUuid($row->getKey(), 7)])->unique()->values()->all());
-        $this->assertCount(count($companies), $rows->pluck('id')->unique());
+        $this->assertCount(count($companies), $accessLogEntries);
+        $this->assertEqualsCanonicalizing(array_map(fn (Company $company) => $company->getKey(), $companies), $accessLogEntries->pluck('company_id')->all());
+        $this->assertCount(1, $accessLogEntries->map(fn (AccessLogEntry $accessLogEntry): string => $accessLogEntry->first_seen_at->toDateTimeString())->unique());
+        $this->assertSame([[$accessEvent, $user->getKey(), true]], $accessLogEntries->map(fn (AccessLogEntry $accessLogEntry): array => [$accessLogEntry->event, $accessLogEntry->user_id, Str::isUuid($accessLogEntry->getKey(), 7)])->unique()->values()->all());
+        $this->assertCount(count($companies), $accessLogEntries->pluck('id')->unique());
     }
 
     protected function assertOneAccessLogInsert(): void
@@ -60,47 +60,47 @@ trait AssertsAccessLog
         $this->assertCount(1, $inserts);
     }
 
-    protected function assertNoAccessLogged(AccessEvent $event): void
+    protected function assertNoAccessLogged(AccessEvent $accessEvent): void
     {
-        $this->assertFalse(AccessLogEntry::query()->where('event', $event)->exists(), "No {$event->value} row was expected.");
+        $this->assertFalse(AccessLogEntry::query()->where('event', $accessEvent)->exists(), "No {$accessEvent->value} row was expected.");
     }
 
-    protected function assertAnsweredAs(AccessLogEntry $entry, int $status, ?ApiErrorCode $errorCode): void
+    protected function assertAnsweredAs(AccessLogEntry $accessLogEntry, int $status, ?ApiErrorCode $apiErrorCode): void
     {
-        $this->assertSame($status, $entry->status);
-        $this->assertSame($errorCode?->value, $entry->error_code);
+        $this->assertSame($status, $accessLogEntry->status);
+        $this->assertSame($apiErrorCode?->value, $accessLogEntry->error_code);
     }
 
     /**
-     * Assert $entry carries the request $response answered: its correlation id, the
+     * Assert $accessLogEntry carries the request $response answered: its correlation id, the
      * client's address and user agent, and $endpoint as "<method> <route template>".
      */
-    protected function assertLoggedRequest(TestResponse $response, AccessLogEntry $entry, string $endpoint): void
+    protected function assertLoggedRequest(TestResponse $response, AccessLogEntry $accessLogEntry, string $endpoint): void
     {
         $correlationId = $response->headers->get('Correlation-Id');
         $this->assertIsString($correlationId);
 
-        $this->assertSame($correlationId, $entry->request_id);
-        $this->assertSame('127.0.0.1', $entry->ip_address);
-        $this->assertSame('Symfony', $entry->user_agent);
-        $this->assertSame($endpoint, "{$entry->http_method} {$entry->route}");
+        $this->assertSame($correlationId, $accessLogEntry->request_id);
+        $this->assertSame('127.0.0.1', $accessLogEntry->ip_address);
+        $this->assertSame('Symfony', $accessLogEntry->user_agent);
+        $this->assertSame($endpoint, "{$accessLogEntry->http_method} {$accessLogEntry->route}");
     }
 
-    protected function assertSeenOnceAsAPlatformRow(AccessLogEntry $entry): void
+    protected function assertSeenOnceAsAPlatformRow(AccessLogEntry $accessLogEntry): void
     {
-        $this->assertSame(1, $entry->occurrences);
-        $this->assertSame(now()->toDateTimeString(), $entry->first_seen_at->toDateTimeString());
-        $this->assertSame(now()->toDateTimeString(), $entry->last_seen_at->toDateTimeString());
-        $this->assertNull($entry->company_id);
+        $this->assertSame(1, $accessLogEntry->occurrences);
+        $this->assertSame(now()->toDateTimeString(), $accessLogEntry->first_seen_at->toDateTimeString());
+        $this->assertSame(now()->toDateTimeString(), $accessLogEntry->last_seen_at->toDateTimeString());
+        $this->assertNull($accessLogEntry->company_id);
     }
 
     /**
-     * @param  ArrayObject<int, MessageLogged>  $logged
+     * @param  ArrayObject<int, MessageLogged>  $arrayObject
      * @param  array<string, ?string>  $outcome
      */
-    protected function assertWriteFailureReported(ArrayObject $logged, array $outcome): void
+    protected function assertWriteFailureReported(ArrayObject $arrayObject, array $outcome): void
     {
-        $critical = array_values(array_filter($logged->getArrayCopy(), fn (MessageLogged $record): bool => $record->level === 'critical'));
+        $critical = array_values(array_filter($arrayObject->getArrayCopy(), fn (MessageLogged $messageLogged): bool => $messageLogged->level === 'critical'));
 
         $this->assertCount(1, $critical);
         $this->assertInstanceOf(AccessLogWriteFailedException::class, $critical[0]->context['exception']);
@@ -130,9 +130,9 @@ trait AssertsAccessLog
     /** @return ArrayObject<int, MessageLogged> */
     protected function collectLogRecords(): ArrayObject
     {
-        $logged = new ArrayObject;
-        Log::listen(fn (MessageLogged $record) => $logged->append($record));
+        $arrayObject = new ArrayObject;
+        Log::listen(fn (MessageLogged $messageLogged) => $arrayObject->append($messageLogged));
 
-        return $logged;
+        return $arrayObject;
     }
 }

@@ -184,8 +184,8 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         $response->assertOk();
         /** @var list<string> $returned */
         $returned = $response->json('data.recovery_codes');
-        $reloaded = User::query()->whereKey($user->getKey())->firstOrFail();
-        $stored = $reloaded->two_factor_recovery_codes ?? [];
+        $user = User::query()->whereKey($user->getKey())->firstOrFail();
+        $stored = $user->two_factor_recovery_codes ?? [];
 
         $this->assertSame(range(0, 9), array_keys($returned), 'Ten regenerated codes come back as a list.');
         $this->assertCount(10, array_unique($returned), 'Regenerated codes must be distinct.');
@@ -193,8 +193,8 @@ class RegenerateRecoveryCodesTest extends AuthTestCase
         foreach ($returned as $index => $code) {
             $this->assertTrue(Hash::check($code, $stored[$index]), 'Every returned code must verify against its stored hash.');
         }
-        $this->assertSame($secretBefore, (string) $reloaded->two_factor_secret, 'The TOTP secret must be unchanged (no QR re-scan).');
-        $this->assertNotNull($reloaded->two_factor_confirmed_at, '2FA must remain enabled.');
+        $this->assertSame($secretBefore, (string) $user->two_factor_secret, 'The TOTP secret must be unchanged (no QR re-scan).');
+        $this->assertNotNull($user->two_factor_confirmed_at, '2FA must remain enabled.');
         $this->assertRegenerateMarkerRecorded($user);
     }
 

@@ -17,13 +17,13 @@ class ProfileController extends Controller
         return new MeResource($request->user());
     }
 
-    public function update(Request $request, UpdateUserProfileInteractor $interactor): MeResource
+    public function update(Request $request, UpdateUserProfileInteractor $updateUserProfileInteractor): MeResource
     {
-        $command = UpdateUserProfileCommand::validateAndCreate($request);
+        $updateUserProfileCommand = UpdateUserProfileCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        return new MeResource($interactor->execute($user, $command, RequestOrigin::fromRequest($request)));
+        return new MeResource($updateUserProfileInteractor->execute($user, $updateUserProfileCommand, RequestOrigin::fromRequest($request)));
     }
 }

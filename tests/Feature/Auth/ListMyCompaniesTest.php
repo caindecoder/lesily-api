@@ -141,15 +141,15 @@ class ListMyCompaniesTest extends AuthTestCase
     public function when_two_companies_share_a_name_then_join_order_breaks_the_tie(): void
     {
         // Given the employee of Contoso, who then joined a second company also named Contoso
-        $second = Company::factory()->named('Contoso')->create();
-        $this->attachMember($second, $this->member, $this->seededRole('employee'));
+        $secondCompany = Company::factory()->named('Contoso')->create();
+        $this->attachMember($secondCompany, $this->member, $this->seededRole('employee'));
 
         // When they list their companies
         $response = $this->listCompanies($this->member);
 
         // Then the earlier-joined membership leads
         $this->assertCompaniesListed($response, ['Contoso', 'Contoso']);
-        $this->assertSame([$this->company->getKey(), $second->getKey()], $response->json('data.*.id'));
+        $this->assertSame([$this->company->getKey(), $secondCompany->getKey()], $response->json('data.*.id'));
     }
 
     // Edge — edge row values serialize faithfully: a planless (trial) company and
@@ -177,10 +177,10 @@ class ListMyCompaniesTest extends AuthTestCase
     public function when_the_default_membership_was_removed_then_no_row_flagged_default(): void
     {
         // Given the employee, a member of Contoso and Beta, whose default Beta membership was then removed
-        $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
-        $this->softDeleteMembership($beta, $this->member);
+        $betaCompany = Company::factory()->named('Beta')->create();
+        $this->attachMember($betaCompany, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $betaCompany->getKey()]);
+        $this->softDeleteMembership($betaCompany, $this->member);
 
         // When they list their companies
         $response = $this->listCompanies($this->member);
@@ -201,11 +201,11 @@ class ListMyCompaniesTest extends AuthTestCase
         // Given a user who joined Zeta (Pro, admin, onboarded) before Acme (Free, employee)
         $this->travelTo(CarbonImmutable::parse('2026-07-08 10:00:00'));
         $user = $this->aRegisteredUser();
-        $zeta = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
-        $acme = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
-        $this->attachMember($zeta, $user, $this->seededRole('admin'));
-        $this->completedOnboardingIn($zeta, $user);
-        $this->attachMember($acme, $user, $this->seededRole('employee'));
+        $zetaCompany = Company::factory()->named('Zeta')->onPlan(BillingPlan::Pro)->create();
+        $acmeCompany = Company::factory()->named('Acme')->onPlan(BillingPlan::Free)->create();
+        $this->attachMember($zetaCompany, $user, $this->seededRole('admin'));
+        $this->completedOnboardingIn($zetaCompany, $user);
+        $this->attachMember($acmeCompany, $user, $this->seededRole('employee'));
 
         // When they list their companies
         $response = $this->listCompanies($user);
@@ -213,8 +213,8 @@ class ListMyCompaniesTest extends AuthTestCase
         // Then both memberships return name-ordered with the exact B4 row shape
         $response->assertExactJson([
             'data' => [
-                $this->expectedCompanyRow($acme, 'employee'),
-                $this->expectedCompanyRow($zeta, 'admin', onboarded: true),
+                $this->expectedCompanyRow($acmeCompany, 'employee'),
+                $this->expectedCompanyRow($zetaCompany, 'admin', onboarded: true),
             ],
         ]);
     }

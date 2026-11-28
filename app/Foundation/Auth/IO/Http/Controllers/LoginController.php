@@ -22,9 +22,9 @@ use App\Foundation\Auth\IO\Http\Resources\TwoFactorChallengeResource;
  */
 class LoginController extends Controller
 {
-    public function __invoke(Request $request, LogInInteractor $interactor): JsonResponse
+    public function __invoke(Request $request, LogInInteractor $logInInteractor): JsonResponse
     {
-        $outcome = $interactor->execute(LoginCommand::validateAndCreate(
+        $outcome = $logInInteractor->execute(LoginCommand::validateAndCreate(
             $request->merge(['deviceName' => DeviceName::resolve($request->input('deviceName'), $request)])
         ));
 
@@ -36,7 +36,7 @@ class LoginController extends Controller
 
         // The only other outcome is SessionIssued — LogInInteractor returns the sealed
         // ChallengeRequired|SessionIssued union, so the type narrows here automatically.
-        return (new LoginResource($outcome->user, $outcome->session->token, $outcome->session->expiresAt))
+        return (new LoginResource($outcome->user, $outcome->issuedSession->token, $outcome->issuedSession->expiresAt))
             ->response();
     }
 }

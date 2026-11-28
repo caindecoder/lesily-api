@@ -15,11 +15,11 @@ use App\Foundation\Auth\UseCases\Interactors\ListSessionsInteractor;
  */
 class ViewSessionsController extends Controller
 {
-    public function __invoke(Request $request, ListSessionsInteractor $interactor): SessionCollection
+    public function __invoke(Request $request, ListSessionsInteractor $listSessionsInteractor): SessionCollection
     {
         /** @var User $user */
         $user = $request->user();
 
-        return new SessionCollection($interactor->execute($user));
+        return new SessionCollection($listSessionsInteractor->execute($user));
     }
 }

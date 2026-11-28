@@ -484,9 +484,9 @@ class RegisterOwnerTest extends AuthTestCase
     public function when_the_registration_token_is_used_then_it_authenticates_the_new_owner(): void
     {
         // Given a freshly registered owner and the token + company from the response
-        $registration = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
-        $token = $registration->json('data.token');
-        $companyId = $registration->json('data.company.id');
+        $registrationResponse = $this->postJson('/api/v1/auth/register', $this->validRegistrationPayload());
+        $token = $registrationResponse->json('data.token');
+        $companyId = $registrationResponse->json('data.company.id');
 
         // When the token is used against a company-scoped route
         $response = $this->withHeader('Authorization', "Bearer {$token}")
@@ -557,15 +557,15 @@ class RegisterOwnerTest extends AuthTestCase
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
         $company = Company::query()->where('owner_id', $owner->getKey())->sole();
-        $signedUpEvent = LesilyStoredEvent::query()
+        $eloquentStoredEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $owner->getKey())
             ->where('event_class', UserSignedUpAsOwner::class)
             ->sole();
-        $entry = AuditEntry::query()->where('action', AuditAction::UserRegistered)->sole();
+        $auditEntry = AuditEntry::query()->where('action', AuditAction::UserRegistered)->sole();
 
         $this->assertSame([
             'company_id' => $company->getKey(),
-            'stored_event_id' => $signedUpEvent->getKey(),
+            'stored_event_id' => $eloquentStoredEvent->getKey(),
             'event_class' => 'UserSignedUpAsOwner',
             'subject' => ['user', $owner->getKey(), $owner->name],
             'description' => 'User registered',
@@ -574,15 +574,15 @@ class RegisterOwnerTest extends AuthTestCase
             'metadata' => null,
             'severity' => 'info',
         ], [
-            'company_id' => $entry->company_id,
-            'stored_event_id' => $entry->stored_event_id,
-            'event_class' => $entry->event_class,
-            'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
-            'description' => $entry->description,
-            'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
-            'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
-            'metadata' => $entry->metadata,
-            'severity' => $entry->severity,
+            'company_id' => $auditEntry->company_id,
+            'stored_event_id' => $auditEntry->stored_event_id,
+            'event_class' => $auditEntry->event_class,
+            'subject' => [$auditEntry->subject_type->value, $auditEntry->subject_id, $auditEntry->subject_label],
+            'description' => $auditEntry->description,
+            'actor' => [$auditEntry->actor_user_id, $auditEntry->actor_role_code, $auditEntry->actor_label],
+            'origin' => [$auditEntry->ip_address, $auditEntry->user_agent, $auditEntry->request_id],
+            'metadata' => $auditEntry->metadata,
+            'severity' => $auditEntry->severity,
         ]);
     }
 
@@ -630,15 +630,15 @@ class RegisterOwnerTest extends AuthTestCase
             ->count());
 
         foreach (['tos', 'privacy'] as $policyType) {
-            $consent = LesilyStoredEvent::query()
+            $eloquentStoredEvent = LesilyStoredEvent::query()
                 ->whereForCompany($company->getKey())
                 ->where('event_class', ConsentRecorded::class)
                 ->where('event_properties->policyType', $policyType)
                 ->sole();
 
-            $this->assertSame('v1.0', $consent->event_properties['version']);
-            $this->assertSame($owner->getKey(), $consent->event_properties['userId']);
-            $this->assertSame('127.0.0.1', $consent->event_properties['ip']);
+            $this->assertSame('v1.0', $eloquentStoredEvent->event_properties['version']);
+            $this->assertSame($owner->getKey(), $eloquentStoredEvent->event_properties['userId']);
+            $this->assertSame('127.0.0.1', $eloquentStoredEvent->event_properties['ip']);
         }
     }
 
@@ -650,19 +650,19 @@ class RegisterOwnerTest extends AuthTestCase
         $this->assertSame(2, ConsentRecord::query()->where('company_id', $company->getKey())->count());
 
         foreach (['tos', 'privacy'] as $policyType) {
-            $record = ConsentRecord::query()
+            $consent = ConsentRecord::query()
                 ->where('company_id', $company->getKey())
                 ->where('policy_type', $policyType)
                 ->sole();
-            $event = LesilyStoredEvent::query()
+            $eloquentStoredEvent = LesilyStoredEvent::query()
                 ->whereForCompany($company->getKey())
                 ->where('event_class', ConsentRecorded::class)
                 ->where('event_properties->policyType', $policyType)
                 ->sole();
 
             $this->assertSame(
-                [$owner->getKey(), 'v1.0', '127.0.0.1', '2026-06-08 00:00:00', $event->getKey()],
-                [$record->user_id, $record->version, $record->ip_address, $record->consented_at->toDateTimeString(), $record->stored_event_id],
+                [$owner->getKey(), 'v1.0', '127.0.0.1', '2026-06-08 00:00:00', $eloquentStoredEvent->getKey()],
+                [$consent->user_id, $consent->version, $consent->ip_address, $consent->consented_at->toDateTimeString(), $consent->stored_event_id],
             );
         }
     }
@@ -690,14 +690,14 @@ class RegisterOwnerTest extends AuthTestCase
         $ownerRole = Role::findByCode('owner');
 
         $this->assertNotNull($ownerRole);
-        $membership = CompanyUser::query()
+        $companyUser = CompanyUser::query()
             ->where('user_id', $owner->getKey())
             ->where('company_id', $company->getKey())
             ->where('role_id', $ownerRole->getKey())
             ->sole();
         $this->assertSame(
             ['Kamala Perera', 'kamala@contoso.lk', '+94771234567', 'spouse'],
-            [$membership->emergency_contact_name, $membership->emergency_contact_email, $membership->emergency_contact_phone, $membership->emergency_contact_relationship],
+            [$companyUser->emergency_contact_name, $companyUser->emergency_contact_email, $companyUser->emergency_contact_phone, $companyUser->emergency_contact_relationship],
         );
     }
 

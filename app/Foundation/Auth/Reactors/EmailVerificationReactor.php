@@ -26,8 +26,8 @@ use Spatie\EventSourcing\EventHandlers\Reactors\Reactor;
  */
 class EmailVerificationReactor extends Reactor implements ShouldQueue
 {
-    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $userSignedUpAsOwner): void
     {
-        User::query()->findOrFail($event->userId)->sendEmailVerificationNotification();
+        User::query()->findOrFail($userSignedUpAsOwner->userId)->sendEmailVerificationNotification();
     }
 }

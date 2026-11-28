@@ -23,11 +23,11 @@ class Google2faTotpVerifierTest extends AuthTestCase
     public function when_a_structurally_impossible_code_is_submitted_then_it_does_not_verify(): void
     {
         // Given the real verifier and a freshly generated secret
-        $verifier = new Google2faTotpVerifier(new Google2FA);
-        $secret = $verifier->generateSecret();
+        $google2faTotpVerifier = new Google2faTotpVerifier(new Google2FA);
+        $secret = $google2faTotpVerifier->generateSecret();
 
         // When a structurally-impossible code is checked
-        $verified = $verifier->verify($secret, 'not-a-totp-code');
+        $verified = $google2faTotpVerifier->verify($secret, 'not-a-totp-code');
 
         // Then it does not verify
         $this->assertFalse($verified);
@@ -37,26 +37,26 @@ class Google2faTotpVerifierTest extends AuthTestCase
     public function when_the_current_authenticator_code_is_submitted_then_it_verifies(): void
     {
         // Given the real verifier and a freshly generated secret
-        $google2fa = new Google2FA;
-        $verifier = new Google2faTotpVerifier($google2fa);
-        $secret = $verifier->generateSecret();
+        $google2FA = new Google2FA;
+        $google2faTotpVerifier = new Google2faTotpVerifier($google2FA);
+        $secret = $google2faTotpVerifier->generateSecret();
 
         // When the authenticator's current code is checked
-        $currentCode = $google2fa->getCurrentOtp($secret);
+        $currentCode = $google2FA->getCurrentOtp($secret);
 
         // Then it verifies
-        $this->assertTrue($verifier->verify($secret, $currentCode));
+        $this->assertTrue($google2faTotpVerifier->verify($secret, $currentCode));
     }
 
     #[Test]
     public function when_a_provisioning_uri_is_built_then_it_is_a_well_formed_otpauth_uri(): void
     {
         // Given the real verifier and a secret
-        $verifier = new Google2faTotpVerifier(new Google2FA);
-        $secret = $verifier->generateSecret();
+        $google2faTotpVerifier = new Google2faTotpVerifier(new Google2FA);
+        $secret = $google2faTotpVerifier->generateSecret();
 
         // When the provisioning URI is built for an account
-        $uri = $verifier->provisioningUri($secret, 'alice@contoso.lk');
+        $uri = $google2faTotpVerifier->provisioningUri($secret, 'alice@contoso.lk');
 
         // Then it is an otpauth:// TOTP URI carrying the secret and the issuer
         $this->assertStringStartsWith('otpauth://totp/', $uri);

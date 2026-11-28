@@ -21,32 +21,32 @@ use App\Foundation\Auth\UseCases\Commands\UpdateUserProfileCommand;
  */
 class UpdateUserProfileInteractor
 {
-    public function __construct(protected readonly UserLevelAudit $audit) {}
+    public function __construct(protected readonly UserLevelAudit $userLevelAudit) {}
 
-    public function execute(User $user, UpdateUserProfileCommand $command, RequestOrigin $origin): User
+    public function execute(User $user, UpdateUserProfileCommand $updateUserProfileCommand, RequestOrigin $requestOrigin): User
     {
-        $changes = $this->changesOf($user, $command);
+        $fieldChanges = $this->changesOf($user, $updateUserProfileCommand);
 
-        if ($changes->isEmpty()) {
+        if ($fieldChanges->isEmpty()) {
             return $user;
         }
 
-        DB::transaction(function () use ($user, $command, $changes, $origin): void {
+        DB::transaction(function () use ($user, $updateUserProfileCommand, $fieldChanges, $requestOrigin): void {
             UserAggregate::retrieve($user->getKey())
-                ->updateProfile($command, $changes->fields())
+                ->updateProfile($updateUserProfileCommand, $fieldChanges->fields())
                 ->persist();
 
-            $this->audit->profileUpdated($user->refresh(), $changes, $origin);
+            $this->userLevelAudit->profileUpdated($user->refresh(), $fieldChanges, $requestOrigin);
         });
 
         return $user;
     }
 
-    protected function changesOf(User $user, UpdateUserProfileCommand $command): FieldChanges
+    protected function changesOf(User $user, UpdateUserProfileCommand $updateUserProfileCommand): FieldChanges
     {
         return FieldChanges::between(
             ['name' => $user->name, 'locale' => $user->locale],
-            ['name' => $command->name, 'locale' => $command->locale->value],
+            ['name' => $updateUserProfileCommand->name, 'locale' => $updateUserProfileCommand->locale->value],
         );
     }
 }

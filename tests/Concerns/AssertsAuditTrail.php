@@ -36,9 +36,9 @@ trait AssertsAuditTrail
     }
 
     /** @return array<string, mixed> */
-    protected function changesOf(AuditEntry $entry): array
+    protected function changesOf(AuditEntry $auditEntry): array
     {
-        $changes = $entry->metadata['changes'] ?? [];
+        $changes = $auditEntry->metadata['changes'] ?? [];
         $this->assertIsArray($changes);
         array_walk($changes, fn (mixed &$change): bool => is_array($change) && ksort($change));
         ksort($changes);
@@ -47,9 +47,9 @@ trait AssertsAuditTrail
     }
 
     /** @param array<string, array{from: ?string, to: ?string}> $plain */
-    protected function assertEncryptedChanges(AuditEntry $entry, array $plain): void
+    protected function assertEncryptedChanges(AuditEntry $auditEntry, array $plain): void
     {
-        $metadata = DB::table('audit_trail')->where('id', $entry->getKey())->value('metadata');
+        $metadata = DB::table('audit_trail')->where('id', $auditEntry->getKey())->value('metadata');
         $this->assertIsString($metadata);
         /** @var array{changes: array<string, array<string, mixed>>} $stored */
         $stored = json_decode($metadata, true);
@@ -85,13 +85,13 @@ trait AssertsAuditTrail
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        $entries = AuditEntry::query()->where('request_id', $requestId)->get();
-        $this->assertNotEmpty($entries);
+        $auditEntries = AuditEntry::query()->where('request_id', $requestId)->get();
+        $this->assertNotEmpty($auditEntries);
 
-        foreach ($entries as $entry) {
+        foreach ($auditEntries as $auditEntry) {
             $this->assertSame(
                 [$actor->getKey(), $roleCode, $actor->name, self::DEVICE_IP, self::DEVICE, $requestId],
-                [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label, $entry->ip_address, $entry->user_agent, $entry->request_id],
+                [$auditEntry->actor_user_id, $auditEntry->actor_role_code, $auditEntry->actor_label, $auditEntry->ip_address, $auditEntry->user_agent, $auditEntry->request_id],
             );
         }
     }

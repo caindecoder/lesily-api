@@ -75,15 +75,15 @@ class UpdateProfileTest extends AuthTestCase
     public function when_targeting_another_users_profile_then_the_route_does_not_exist(): void
     {
         // Given an authenticated user Alice and another user Bob in the system
-        $alice = $this->anEstablishedUser();
-        $bob = User::factory()->named('Bob Silva')->locale('ta')->create();
+        $user = $this->anEstablishedUser();
+        $otherUser = User::factory()->named('Bob Silva')->locale('ta')->create();
 
         // When Alice attempts an id-addressed profile update against Bob
-        $response = $this->updateAnotherUsersProfile($alice, $bob, ['name' => 'Hijacked', 'locale' => 'en']);
+        $response = $this->updateAnotherUsersProfile($user, $otherUser, ['name' => 'Hijacked', 'locale' => 'en']);
 
         // Then no such route exists (self-only by construction) and Bob is unchanged
         $response->assertNotFound();
-        $this->assertDatabaseHas('users', ['id' => $bob->getKey(), 'name' => 'Bob Silva', 'locale' => 'ta']);
+        $this->assertDatabaseHas('users', ['id' => $otherUser->getKey(), 'name' => 'Bob Silva', 'locale' => 'ta']);
     }
 
     /**
@@ -232,7 +232,7 @@ class UpdateProfileTest extends AuthTestCase
         // Then the mail leg renders via the NEW language (the HasLocalePreference path)
         Mail::assertQueued(
             SystemNotificationMail::class,
-            fn (SystemNotificationMail $mail): bool => $mail->locale === 'si',
+            fn (SystemNotificationMail $systemNotificationMail): bool => $systemNotificationMail->locale === 'si',
         );
     }
 
@@ -328,11 +328,11 @@ class UpdateProfileTest extends AuthTestCase
      *
      * @param  array<string, mixed>  $payload
      */
-    protected function updateAnotherUsersProfile(User $actor, User $target, array $payload): TestResponse
+    protected function updateAnotherUsersProfile(User $actor, User $otherUser, array $payload): TestResponse
     {
         Sanctum::actingAs($actor);
 
-        return $this->putJson("/api/v1/users/{$target->getKey()}/profile", $payload);
+        return $this->putJson("/api/v1/users/{$otherUser->getKey()}/profile", $payload);
     }
 
     /**
@@ -386,12 +386,12 @@ class UpdateProfileTest extends AuthTestCase
      */
     protected function assertProfileUpdateWasEventSourced(User $user, array $expected): void
     {
-        $stored = LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserProfileUpdated::class)->sole();
 
-        $this->assertSame($user->getKey(), $stored->event_properties['userId']);
-        $this->assertSame($expected['name'], $stored->event_properties['name']);
-        $this->assertSame($expected['locale'], $stored->event_properties['locale']);
-        $this->assertSame($expected['changedFields'], $stored->event_properties['changedFields']);
+        $this->assertSame($user->getKey(), $eloquentStoredEvent->event_properties['userId']);
+        $this->assertSame($expected['name'], $eloquentStoredEvent->event_properties['name']);
+        $this->assertSame($expected['locale'], $eloquentStoredEvent->event_properties['locale']);
+        $this->assertSame($expected['changedFields'], $eloquentStoredEvent->event_properties['changedFields']);
     }
 
     /**

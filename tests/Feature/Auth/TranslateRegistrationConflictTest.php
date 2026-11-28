@@ -39,13 +39,13 @@ class TranslateRegistrationConflictTest extends AuthTestCase
     public function when_a_unique_violation_is_on_an_unmapped_constraint_then_no_registration_conflict_is_translated(): void
     {
         // Given a unique violation on some constraint the guard does not map
-        $violation = $this->uniqueViolationOnIndex('some_other_unique');
+        $uniqueConstraintViolationException = $this->uniqueViolationOnIndex('some_other_unique');
 
         // When the guard is asked to translate it into a registration conflict
-        $conflict = (new RegistrationUniquenessGuard)->conflictFor($violation);
+        $registrationConflictException = (new RegistrationUniquenessGuard)->conflictFor($uniqueConstraintViolationException);
 
         // Then there is no conflict to raise — the caller re-throws the original error
-        $this->assertNull($conflict);
+        $this->assertNull($registrationConflictException);
     }
 
     protected function uniqueViolationOnIndex(string $index): UniqueConstraintViolationException

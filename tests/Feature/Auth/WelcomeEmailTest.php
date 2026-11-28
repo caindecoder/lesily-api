@@ -62,9 +62,9 @@ class WelcomeEmailTest extends AuthTestCase
         Notification::assertSentTo(
             $owner,
             SystemNotification::class,
-            fn (SystemNotification $notification): bool => $notification->type === NotificationType::GeneralAccountNotice
-                && $notification->companyName === $companyName
-                && $notification->companyId === $company->getKey(),
+            fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::GeneralAccountNotice
+                && $systemNotification->companyName === $companyName
+                && $systemNotification->companyId === $company->getKey(),
         );
     }
 }

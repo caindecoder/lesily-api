@@ -38,9 +38,9 @@ class SessionResource extends JsonResource
     {
         /** @var User|null $user */
         $user = $request->user();
-        $current = $user?->currentAccessToken();
+        $currentPersonalAccessToken = $user?->currentAccessToken();
 
-        return $current instanceof PersonalAccessToken
-            && $current->getKey() === $this->getKey();
+        return $currentPersonalAccessToken instanceof PersonalAccessToken
+            && $currentPersonalAccessToken->getKey() === $this->getKey();
     }
 }

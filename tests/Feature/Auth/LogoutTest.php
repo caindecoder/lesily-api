@@ -92,9 +92,9 @@ class LogoutTest extends AuthTestCase
      * authenticates, while the user's other session still does (one invariant, two
      * inseparable facets — neither alone distinguishes current-only from logout-all).
      */
-    protected function assertOnlyCurrentSessionRevoked(TestResponse $current, TestResponse $other, User $user): void
+    protected function assertOnlyCurrentSessionRevoked(TestResponse $currentResponse, TestResponse $otherResponse, User $user): void
     {
-        $this->assertUnauthenticated($current);
-        $other->assertOk()->assertJsonPath('user_id', $user->getKey());
+        $this->assertUnauthenticated($currentResponse);
+        $otherResponse->assertOk()->assertJsonPath('user_id', $user->getKey());
     }
 }

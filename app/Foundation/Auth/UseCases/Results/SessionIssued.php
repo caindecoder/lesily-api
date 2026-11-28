@@ -11,7 +11,7 @@ use App\Models\User;
 class SessionIssued extends LoginOutcome
 {
     public function __construct(
-        public readonly IssuedSession $session,
+        public readonly IssuedSession $issuedSession,
         public readonly User $user,
     ) {}
 }

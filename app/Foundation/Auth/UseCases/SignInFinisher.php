@@ -14,17 +14,17 @@ class SignInFinisher
 {
     public function __construct(
         protected readonly SessionIssuer $sessionIssuer,
-        protected readonly AccessLogRecorder $accessLog,
+        protected readonly AccessLogRecorder $accessLogRecorder,
     ) {}
 
-    public function finish(PendingSession $pending): SessionIssued
+    public function finish(PendingSession $pendingSession): SessionIssued
     {
-        $user = $pending->user;
+        $user = $pendingSession->user;
         $user->last_logged_at = now();
         $user->save();
-        $session = $this->sessionIssuer->issue($user, $pending->deviceName);
-        $this->accessLog->note(AccessEvent::LoginSucceeded, $pending->factor, $user);
+        $issuedSession = $this->sessionIssuer->issue($user, $pendingSession->deviceName);
+        $this->accessLogRecorder->note(AccessEvent::LoginSucceeded, $pendingSession->accessEventReason, $user);
 
-        return new SessionIssued($session, $user);
+        return new SessionIssued($issuedSession, $user);
     }
 }

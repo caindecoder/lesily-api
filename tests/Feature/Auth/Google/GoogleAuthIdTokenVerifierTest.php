@@ -33,7 +33,7 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
 
     protected const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 
-    protected PrivateKey $googleKey;
+    protected PrivateKey $privateKey;
 
     protected string $certsLocation;
 
@@ -43,8 +43,8 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
     {
         parent::setUp();
 
-        $this->googleKey = $this->aNewRsaKey();
-        $this->certsLocation = $this->aKeySetFileFor($this->googleKey);
+        $this->privateKey = $this->aNewRsaKey();
+        $this->certsLocation = $this->aKeySetFileFor($this->privateKey);
         $this->cachePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'google-certs-'.uniqid();
     }
 
@@ -127,13 +127,13 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
     public function when_googles_keys_cannot_be_fetched_then_verification_reports_sign_in_unavailable(Closure $googleAnswers): void
     {
         // Given Google's key endpoint failing to hand out its keys
-        $verifier = new GoogleAuthIdTokenVerifier(new AccessToken($googleAnswers), self::CLIENT_ID, self::GOOGLE_CERTS_URL);
+        $googleAuthIdTokenVerifier = new GoogleAuthIdTokenVerifier(new AccessToken($googleAnswers), self::CLIENT_ID, self::GOOGLE_CERTS_URL);
 
         // Then sign-in is reported unavailable, not the token invalid
         $this->expectException(GoogleSignInUnavailableException::class);
 
         // When the verifier checks a well-signed token
-        $verifier->verify($this->aSignedToken());
+        $googleAuthIdTokenVerifier->verify($this->aSignedToken());
     }
 
     #[Test]
@@ -143,11 +143,11 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
         $token = $this->aSignedToken(['name' => null]);
 
         // When the verifier checks it
-        $identity = $this->verifierFor(self::CLIENT_ID)->verify($token);
+        $googleIdentity = $this->verifierFor(self::CLIENT_ID)->verify($token);
 
         // Then the identity is read, its name empty
-        $this->assertSame('109876543210', $identity->subject);
-        $this->assertSame('', $identity->name);
+        $this->assertSame('109876543210', $googleIdentity->subject);
+        $this->assertSame('', $googleIdentity->name);
     }
 
     #[Test]
@@ -163,10 +163,10 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
         unlink($this->certsLocation);
 
         // When a later request verifies a token after Google's keys have gone away
-        $identity = app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
+        $googleIdentity = app(GoogleIdTokenVerifier::class)->verify($this->aSignedToken());
 
         // Then the keys come from the cache
-        $this->assertSame('alice@contoso.lk', $identity->email);
+        $this->assertSame('alice@contoso.lk', $googleIdentity->email);
     }
 
     #[Test]
@@ -176,13 +176,13 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
         $token = $this->aSignedToken();
 
         // When the verifier checks it
-        $identity = $this->verifierFor(self::CLIENT_ID)->verify($token);
+        $googleIdentity = $this->verifierFor(self::CLIENT_ID)->verify($token);
 
         // Then the Google account's identity is read from it
-        $this->assertSame('109876543210', $identity->subject);
-        $this->assertSame('alice@contoso.lk', $identity->email);
-        $this->assertTrue($identity->emailVerified);
-        $this->assertSame('Alice Perera', $identity->name);
+        $this->assertSame('109876543210', $googleIdentity->subject);
+        $this->assertSame('alice@contoso.lk', $googleIdentity->email);
+        $this->assertTrue($googleIdentity->emailVerified);
+        $this->assertSame('Alice Perera', $googleIdentity->name);
     }
 
     /** @return array<string, array{Closure(): ResponseInterface}> */
@@ -204,7 +204,7 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
     }
 
     /** @param  array<string, mixed>  $claimOverrides */
-    protected function aSignedToken(array $claimOverrides = [], ?PrivateKey $signingKey = null): string
+    protected function aSignedToken(array $claimOverrides = [], ?PrivateKey $privateKey = null): string
     {
         return JWT::encode(array_filter([
             'iss' => 'https://accounts.google.com',
@@ -216,7 +216,7 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
             'iat' => time(),
             'exp' => time() + 3600,
             ...$claimOverrides,
-        ], fn (mixed $claim): bool => $claim !== null), ($signingKey ?? $this->googleKey)->toString('PKCS8'), 'RS256', self::KEY_ID);
+        ], fn (mixed $claim): bool => $claim !== null), ($privateKey ?? $this->privateKey)->toString('PKCS8'), 'RS256', self::KEY_ID);
     }
 
     protected function aNewRsaKey(): PrivateKey
@@ -224,10 +224,10 @@ class GoogleAuthIdTokenVerifierTest extends AuthTestCase
         return RSA::createKey(2048);
     }
 
-    protected function aKeySetFileFor(PrivateKey $key): string
+    protected function aKeySetFileFor(PrivateKey $privateKey): string
     {
         /** @var array{keys: list<array<string, string>>} $keySet */
-        $keySet = json_decode($key->getPublicKey()->toString('JWK'), true);
+        $keySet = json_decode($privateKey->getPublicKey()->toString('JWK'), true);
         $path = (string) tempnam(sys_get_temp_dir(), 'google-certs');
         file_put_contents($path, json_encode(['keys' => [[...$keySet['keys'][0], 'kid' => self::KEY_ID, 'alg' => 'RS256']]]));
 

@@ -25,24 +25,24 @@ class RegistrationUniquenessGuard
 
     private const EPF_NUMBER_INDEX = 'companies_epf_number_unique';
 
-    public function ensureUnique(RegisterOwnerCommand $command): void
+    public function ensureUnique(RegisterOwnerCommand $registerOwnerCommand): void
     {
-        if (User::query()->where('email', $command->email)->exists()) {
+        if (User::query()->where('email', $registerOwnerCommand->email)->exists()) {
             throw RegistrationConflictException::forEmail();
         }
 
-        if (Company::query()->where('br_number', $command->brNumber)->exists()) {
+        if (Company::query()->where('br_number', $registerOwnerCommand->brNumber)->exists()) {
             throw RegistrationConflictException::forBrNumber();
         }
 
-        if (Company::query()->where('epf_number', $command->epfNumber)->exists()) {
+        if (Company::query()->where('epf_number', $registerOwnerCommand->epfNumber)->exists()) {
             throw RegistrationConflictException::forEpfNumber();
         }
     }
 
-    public function conflictFor(UniqueConstraintViolationException $violation): ?RegistrationConflictException
+    public function conflictFor(UniqueConstraintViolationException $uniqueConstraintViolationException): ?RegistrationConflictException
     {
-        return match ($violation->index) {
+        return match ($uniqueConstraintViolationException->index) {
             self::EMAIL_INDEX => RegistrationConflictException::forEmail(),
             self::BR_NUMBER_INDEX => RegistrationConflictException::forBrNumber(),
             self::EPF_NUMBER_INDEX => RegistrationConflictException::forEpfNumber(),

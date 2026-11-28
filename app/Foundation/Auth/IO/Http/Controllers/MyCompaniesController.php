@@ -16,11 +16,11 @@ use App\Foundation\Auth\UseCases\Interactors\ListMyCompaniesInteractor;
  */
 class MyCompaniesController extends Controller
 {
-    public function __invoke(Request $request, ListMyCompaniesInteractor $interactor): MyCompaniesCollection
+    public function __invoke(Request $request, ListMyCompaniesInteractor $listMyCompaniesInteractor): MyCompaniesCollection
     {
         /** @var User $user */
         $user = $request->user();
 
-        return new MyCompaniesCollection($interactor->execute($user));
+        return new MyCompaniesCollection($listMyCompaniesInteractor->execute($user));
     }
 }

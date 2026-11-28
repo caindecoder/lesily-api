@@ -87,12 +87,12 @@ class DefaultCompanyTest extends AuthTestCase
             'not a member' => Company::factory()->named('Other')->create()->getKey(),
             'another user\'s company' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->attachMember($other, User::factory()->create(), $this->seededRole('employee')),
+                fn (Company $otherCompany) => $this->attachMember($otherCompany, User::factory()->create(), $this->seededRole('employee')),
             )->getKey(),
             'unknown company id' => Str::uuid7()->toString(),
             'removed membership' => tap(
                 Company::factory()->named('Other')->create(),
-                fn (Company $other) => $this->aRemovedMembership($other, $this->member),
+                fn (Company $otherCompany) => $this->aRemovedMembership($otherCompany, $this->member),
             )->getKey(),
             default => self::fail("Unknown provider case: {$case}"),
         };
@@ -146,17 +146,17 @@ class DefaultCompanyTest extends AuthTestCase
     public function when_setting_a_new_default_then_it_replaces_the_previous_one(): void
     {
         // Given the employee, a member of Contoso and Beta, whose default is Contoso
-        $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
+        $betaCompany = Company::factory()->named('Beta')->create();
+        $this->attachMember($betaCompany, $this->member, $this->seededRole('employee'));
         $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $betaCompany->getKey()]);
 
         // Then — one default per user by construction: Beta replaced Contoso,
         // and the list re-flags exactly Beta (Contoso is not flagged)
-        $this->assertDefaultStored($response, $this->member, $beta->getKey());
-        $this->assertListFlagsDefault($this->member, $beta->getKey());
+        $this->assertDefaultStored($response, $this->member, $betaCompany->getKey());
+        $this->assertListFlagsDefault($this->member, $betaCompany->getKey());
     }
 
     #[Test]
@@ -180,9 +180,9 @@ class DefaultCompanyTest extends AuthTestCase
     {
         // Given the admin with Beta as default, then the owner and the employee with Contoso (a bulk
         // write on the set path would move the admin's; one on the clear path would clear the owner's)
-        $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->admin, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->admin, ['companyId' => $beta->getKey()]);
+        $betaCompany = Company::factory()->named('Beta')->create();
+        $this->attachMember($betaCompany, $this->admin, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->admin, ['companyId' => $betaCompany->getKey()]);
         $this->setDefaultCompany($this->owner, ['companyId' => $this->company->getKey()]);
         $this->setDefaultCompany($this->member, ['companyId' => $this->company->getKey()]);
 
@@ -191,7 +191,7 @@ class DefaultCompanyTest extends AuthTestCase
 
         // Then — the employee's is null; the admin's and the owner's are untouched (user-scoped writes)
         $this->assertDefaultStored($response, $this->member, null);
-        $this->assertDatabaseHas('users', ['id' => $this->admin->getKey(), 'default_company_id' => $beta->getKey()]);
+        $this->assertDatabaseHas('users', ['id' => $this->admin->getKey(), 'default_company_id' => $betaCompany->getKey()]);
         $this->assertDatabaseHas('users', ['id' => $this->owner->getKey(), 'default_company_id' => $this->company->getKey()]);
     }
 
@@ -199,15 +199,15 @@ class DefaultCompanyTest extends AuthTestCase
     public function when_the_default_company_is_hard_deleted_then_the_default_clears(): void
     {
         // Given the employee whose default is Home (set through the endpoint)
-        $home = Company::factory()->named('Home')->create();
-        $this->attachMember($home, $this->member, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->member, ['companyId' => $home->getKey()]);
+        $homeCompany = Company::factory()->named('Home')->create();
+        $this->attachMember($homeCompany, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $homeCompany->getKey()]);
 
         // When the company row is hard-deleted (schema-level pin — no product
         // delete path exists until UC-1-037; the pivot goes first, its FK is
         // restrictOnDelete)
-        CompanyUser::query()->where('company_id', $home->getKey())->forceDelete();
-        Company::query()->whereKey($home->getKey())->forceDelete();
+        CompanyUser::query()->where('company_id', $homeCompany->getKey())->forceDelete();
+        Company::query()->whereKey($homeCompany->getKey())->forceDelete();
 
         // Then — the nullOnDelete FK clears the preference instead of stranding it
         $this->assertDatabaseHas('users', [
@@ -220,24 +220,24 @@ class DefaultCompanyTest extends AuthTestCase
     public function when_member_sets_a_default_company_then_stored_and_flagged_in_list(): void
     {
         // Given the employee, a member of Contoso and Beta with no default
-        $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
+        $betaCompany = Company::factory()->named('Beta')->create();
+        $this->attachMember($betaCompany, $this->member, $this->seededRole('employee'));
 
         // When Beta is set as the default
-        $response = $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
+        $response = $this->setDefaultCompany($this->member, ['companyId' => $betaCompany->getKey()]);
 
         // Then — stored AND the switcher list flags exactly that row (Gherkin 1)
-        $this->assertDefaultStored($response, $this->member, $beta->getKey());
-        $this->assertListFlagsDefault($this->member, $beta->getKey());
+        $this->assertDefaultStored($response, $this->member, $betaCompany->getKey());
+        $this->assertListFlagsDefault($this->member, $betaCompany->getKey());
     }
 
     #[Test]
     public function when_member_clears_the_default_then_no_row_flagged_in_list(): void
     {
         // Given the employee, a member of Contoso and Beta, whose default is Beta
-        $beta = Company::factory()->named('Beta')->create();
-        $this->attachMember($beta, $this->member, $this->seededRole('employee'));
-        $this->setDefaultCompany($this->member, ['companyId' => $beta->getKey()]);
+        $betaCompany = Company::factory()->named('Beta')->create();
+        $this->attachMember($betaCompany, $this->member, $this->seededRole('employee'));
+        $this->setDefaultCompany($this->member, ['companyId' => $betaCompany->getKey()]);
 
         // When the default is cleared
         $response = $this->clearDefaultCompany($this->member);

@@ -28,79 +28,79 @@ use Spatie\EventSourcing\EventHandlers\Projectors\Projector;
  */
 class UserProjector extends Projector
 {
-    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $event): void
+    public function onUserSignedUpAsOwner(UserSignedUpAsOwner $userSignedUpAsOwner): void
     {
         UserReadModel::query()->forceCreate([
-            'id' => $event->userId,
-            'name' => $event->name,
-            'email' => $event->email,
-            'password' => $event->passwordHash,
+            'id' => $userSignedUpAsOwner->userId,
+            'name' => $userSignedUpAsOwner->name,
+            'email' => $userSignedUpAsOwner->email,
+            'password' => $userSignedUpAsOwner->passwordHash,
         ]);
     }
 
-    public function onUserCreatedFromInvitation(UserCreatedFromInvitation $event): void
+    public function onUserCreatedFromInvitation(UserCreatedFromInvitation $userCreatedFromInvitation): void
     {
         UserReadModel::query()->forceCreate([
-            'id' => $event->userId,
-            'name' => $event->name,
-            'email' => $event->email,
-            'password' => $event->passwordHash,
+            'id' => $userCreatedFromInvitation->userId,
+            'name' => $userCreatedFromInvitation->name,
+            'email' => $userCreatedFromInvitation->email,
+            'password' => $userCreatedFromInvitation->passwordHash,
         ]);
     }
 
-    public function onUserEmailVerified(UserEmailVerified $event): void
+    public function onUserEmailVerified(UserEmailVerified $userEmailVerified): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['email_verified_at' => $event->verifiedAt]);
+            ->whereKey($userEmailVerified->userId)
+            ->update(['email_verified_at' => $userEmailVerified->verifiedAt]);
     }
 
-    public function onUserPasswordChanged(UserPasswordChanged $event): void
+    public function onUserPasswordChanged(UserPasswordChanged $userPasswordChanged): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['password' => $event->passwordHash]);
+            ->whereKey($userPasswordChanged->userId)
+            ->update(['password' => $userPasswordChanged->passwordHash]);
     }
 
-    public function onUserPasswordReset(UserPasswordReset $event): void
+    public function onUserPasswordReset(UserPasswordReset $userPasswordReset): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['password' => $event->passwordHash]);
+            ->whereKey($userPasswordReset->userId)
+            ->update(['password' => $userPasswordReset->passwordHash]);
     }
 
-    public function onUserProfileUpdated(UserProfileUpdated $event): void
+    public function onUserProfileUpdated(UserProfileUpdated $userProfileUpdated): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['name' => $event->name, 'locale' => $event->locale]);
+            ->whereKey($userProfileUpdated->userId)
+            ->update(['name' => $userProfileUpdated->name, 'locale' => $userProfileUpdated->locale]);
     }
 
-    public function onUser2FAEnabled(User2FAEnabled $event): void
+    public function onUser2FAEnabled(User2FAEnabled $user2FAEnabled): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['two_factor_confirmed_at' => $event->confirmedAt]);
+            ->whereKey($user2FAEnabled->userId)
+            ->update(['two_factor_confirmed_at' => $user2FAEnabled->confirmedAt]);
     }
 
-    public function onUser2FADisabled(User2FADisabled $event): void
+    public function onUser2FADisabled(User2FADisabled $user2FADisabled): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
+            ->whereKey($user2FADisabled->userId)
             ->update(['two_factor_confirmed_at' => null]);
     }
 
-    public function onUserGoogleOAuthLinked(UserGoogleOAuthLinked $event): void
+    public function onUserGoogleOAuthLinked(UserGoogleOAuthLinked $userGoogleOAuthLinked): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['google_id' => $event->googleSubjectId, 'google_unlinked_at' => null]);
+            ->whereKey($userGoogleOAuthLinked->userId)
+            ->update(['google_id' => $userGoogleOAuthLinked->googleSubjectId, 'google_unlinked_at' => null]);
     }
 
-    public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $event): void
+    public function onUserGoogleOAuthUnlinked(UserGoogleOAuthUnlinked $userGoogleOAuthUnlinked): void
     {
         UserReadModel::query()
-            ->whereKey($event->userId)
-            ->update(['google_id' => null, 'google_unlinked_at' => $event->unlinkedAt]);
+            ->whereKey($userGoogleOAuthUnlinked->userId)
+            ->update(['google_id' => null, 'google_unlinked_at' => $userGoogleOAuthUnlinked->unlinkedAt]);
     }
 }

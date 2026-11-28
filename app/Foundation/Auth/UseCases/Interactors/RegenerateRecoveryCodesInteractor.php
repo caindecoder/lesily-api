@@ -25,23 +25,23 @@ use App\Foundation\Auth\UseCases\Commands\RegenerateRecoveryCodesCommand;
 class RegenerateRecoveryCodesInteractor
 {
     public function __construct(
-        private readonly RecoveryCodeGenerator $recoveryCodes,
+        private readonly RecoveryCodeGenerator $recoveryCodeGenerator,
         private readonly PasswordVerifier $passwordVerifier,
-        private readonly UserLevelAudit $audit,
+        private readonly UserLevelAudit $userLevelAudit,
     ) {}
 
     /**
      * @return list<string>
      */
-    public function execute(User $user, RegenerateRecoveryCodesCommand $command, RequestOrigin $origin): array
+    public function execute(User $user, RegenerateRecoveryCodesCommand $regenerateRecoveryCodesCommand, RequestOrigin $requestOrigin): array
     {
         if ($user->two_factor_confirmed_at === null) {
             throw new TwoFactorNotEnabledException;
         }
 
-        $this->passwordVerifier->verify($user, $command->password);
+        $this->passwordVerifier->verify($user, $regenerateRecoveryCodesCommand->password);
 
-        $plaintextCodes = $this->recoveryCodes->generate();
+        $plaintextCodes = $this->recoveryCodeGenerator->generate();
 
         // Serialize against a concurrent recovery-code verify under the SAME per-user lock
         // VerifyTwoFactorInteractor takes: without it, a verify-consume save built from a
@@ -50,14 +50,14 @@ class RegenerateRecoveryCodesInteractor
         // racing verify sees the rotated codes. Atomic: the direct overwrite and the marker
         // persist commit together; the TOTP secret + two_factor_confirmed_at are untouched
         // (Design-Y; the marker carries no secret material).
-        Cache::lock("2fa-recovery-lock:{$user->getKey()}", seconds: 5)->block(seconds: 5, callback: function () use ($user, $plaintextCodes, $origin): void {
-            DB::transaction(function () use ($user, $plaintextCodes, $origin): void {
+        Cache::lock("2fa-recovery-lock:{$user->getKey()}", seconds: 5)->block(seconds: 5, callback: function () use ($user, $plaintextCodes, $requestOrigin): void {
+            DB::transaction(function () use ($user, $plaintextCodes, $requestOrigin): void {
                 $user->two_factor_recovery_codes = array_map(Hash::make(...), $plaintextCodes);
                 $user->save();
 
                 UserAggregate::retrieve($user->getKey())->regenerateRecoveryCodes()->persist();
 
-                $this->audit->record($user, AuditAction::RecoveryCodesRegenerated, $origin);
+                $this->userLevelAudit->record($user, AuditAction::RecoveryCodesRegenerated, $requestOrigin);
             });
         });
 

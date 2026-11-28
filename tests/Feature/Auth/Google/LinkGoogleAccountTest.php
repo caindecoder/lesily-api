@@ -24,7 +24,7 @@ class LinkGoogleAccountTest extends AuthTestCase
 {
     use FreeTierCompany;
 
-    protected User $alice;
+    protected User $user;
 
     protected function setUp(): void
     {
@@ -32,7 +32,7 @@ class LinkGoogleAccountTest extends AuthTestCase
 
         config(['app.debug' => false]);
         $this->makeFreeTierCompany();
-        $this->alice = $this->member;
+        $this->user = $this->member;
     }
 
     #[Test]
@@ -83,7 +83,7 @@ class LinkGoogleAccountTest extends AuthTestCase
         $this->fakeGoogleIdTokenVerifier(null);
 
         // When Alice links Google with that token
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is refused and nothing is linked
         $this->assertLinkRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
@@ -98,7 +98,7 @@ class LinkGoogleAccountTest extends AuthTestCase
         config(['services.google.client_id' => '']);
 
         // When Alice links Google with any token
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is refused and nothing is linked
         $this->assertLinkRefusedWith($response, Response::HTTP_UNAUTHORIZED, ApiErrorCode::GoogleTokenInvalid);
@@ -112,7 +112,7 @@ class LinkGoogleAccountTest extends AuthTestCase
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor('alice@gmail.com'));
 
         // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is refused, naming the email to use, and nothing is linked
         $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
@@ -124,10 +124,10 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice on a Starter company, holding a Google account for her email that Google has not verified
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email, false));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email, false));
 
         // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is refused, asking for a verified email, and nothing is linked
         $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::GoogleEmailMismatch);
@@ -140,12 +140,12 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice, a user outside Contoso, with no live company whose plan grants Google sign-in,
         // holding her own verified Google account
-        $this->alice = $this->aRegisteredUser();
-        $this->withoutGoogleSignIn($this->alice, $memberships);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->user = $this->aRegisteredUser();
+        $this->withoutGoogleSignIn($this->user, $memberships);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the upgrade refusal names Starter and nothing is linked
         $this->assertLinkRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
@@ -158,10 +158,10 @@ class LinkGoogleAccountTest extends AuthTestCase
         // Given Bob linked to a Google account that now carries Alice's email, and Alice on a Starter company
         User::factory()->linkedToGoogle(self::GOOGLE_SUBJECT)->create();
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links that same Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is refused and nothing is linked to Alice
         $this->assertLinkRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAccountInUse);
@@ -173,11 +173,11 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice on a Starter company, already linked to her Google account
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
-        $this->linkGoogle($this->alice);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
+        $this->linkGoogle($this->user);
 
         // When Alice links Google again
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the second link is refused and the first one stands, recorded once
         $this->assertRefusedWith($response, Response::HTTP_CONFLICT, ApiErrorCode::GoogleAlreadyLinked);
@@ -191,11 +191,11 @@ class LinkGoogleAccountTest extends AuthTestCase
         // Given Alice spending the shared per-IP auth-tier allowance on invalid Google tokens
         $this->fakeGoogleIdTokenVerifier(null);
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $this->linkGoogle($this->alice);
+            $this->linkGoogle($this->user);
         }
 
         // When she tries once more
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the over-limit attempt is throttled
         $this->assertThrottled($response);
@@ -206,7 +206,7 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice on a Starter company, and a users projection that collides on an index other than google_id
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
         $this->induceProjectorFailureFor(UserGoogleOAuthLinked::class, new UniqueConstraintViolationException(
             'mysql',
             'update `users` set `email` = ?',
@@ -215,7 +215,7 @@ class LinkGoogleAccountTest extends AuthTestCase
         ));
 
         // When Alice links her Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the unrelated fault surfaces as itself, never as Google-account-in-use
         $response->assertInternalServerError();
@@ -227,15 +227,15 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice on a Starter company, holding her own verified Google account, and a failing users projection
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
         $this->induceProjectorFailureFor(UserGoogleOAuthLinked::class);
 
         // When Alice links her Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the failure leaves no stored link and no linked account
         $response->assertInternalServerError();
-        $this->assertNull($this->alice->fresh()?->google_id);
+        $this->assertNull($this->user->fresh()?->google_id);
         $this->assertSame(0, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
@@ -245,18 +245,18 @@ class LinkGoogleAccountTest extends AuthTestCase
         // Given Alice on a Starter company, who linked and then unlinked Google, holding her verified Google account
         $this->freezeTime();
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        UserAggregate::retrieve($this->alice->getKey())->linkGoogleOAuth(self::GOOGLE_SUBJECT)->persist();
-        UserAggregate::retrieve($this->alice->getKey())->unlinkGoogleOAuth()->persist();
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        UserAggregate::retrieve($this->user->getKey())->linkGoogleOAuth(self::GOOGLE_SUBJECT)->persist();
+        UserAggregate::retrieve($this->user->getKey())->unlinkGoogleOAuth()->persist();
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links Google again from her profile
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then she is linked again, the unlink marker is cleared, and the re-link is recorded
         $response->assertNoContent();
-        $stored = User::query()->whereKey($this->alice->getKey())->firstOrFail();
-        $this->assertSame(self::GOOGLE_SUBJECT, $stored->google_id);
-        $this->assertNull($stored->google_unlinked_at, 'A re-link must turn Google sign-in back on (G12).');
+        $user = User::query()->whereKey($this->user->getKey())->firstOrFail();
+        $this->assertSame(self::GOOGLE_SUBJECT, $user->google_id);
+        $this->assertNull($user->google_unlinked_at, 'A re-link must turn Google sign-in back on (G12).');
         $this->assertSame(2, LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->count());
     }
 
@@ -265,12 +265,12 @@ class LinkGoogleAccountTest extends AuthTestCase
     public function when_the_google_email_differs_only_in_case_then_the_account_is_linked(string $lesilyEmail, string $googleEmail): void
     {
         // Given Alice on a Starter company, the two emails spelled in different case
-        $this->alice->forceFill(['email' => $lesilyEmail])->save();
+        $this->user->forceFill(['email' => $lesilyEmail])->save();
         $this->putOnPlan($this->company, BillingPlan::Starter);
         $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($googleEmail));
 
         // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then it is linked — email case is not identity
         $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
@@ -281,11 +281,11 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice, the employee of Contoso on Free, also on a Starter company
         $this->putOnPlan($this->company, BillingPlan::Free);
-        $this->memberOfCompanyOnPlan($this->alice, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->memberOfCompanyOnPlan($this->user, BillingPlan::Starter);
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links her Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then one company granting Google sign-in is enough
         $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
@@ -300,10 +300,10 @@ class LinkGoogleAccountTest extends AuthTestCase
             'trial' => $this->putOnTrial($this->company, CarbonImmutable::now()->addDays(30)),
             default => $this->putOnPlan($this->company, BillingPlan::from($plan)),
         };
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links her Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then it is linked
         $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
@@ -314,10 +314,10 @@ class LinkGoogleAccountTest extends AuthTestCase
     {
         // Given Alice on a Starter company, holding her own verified Google account
         $this->putOnPlan($this->company, BillingPlan::Starter);
-        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->alice->email));
+        $this->fakeGoogleIdTokenVerifier($this->aGoogleIdentityFor($this->user->email));
 
         // When Alice links that Google account
-        $response = $this->linkGoogle($this->alice);
+        $response = $this->linkGoogle($this->user);
 
         // Then the link is recorded as a stored event and projected onto her account
         $this->assertLinkedTo($response, self::GOOGLE_SUBJECT);
@@ -351,19 +351,19 @@ class LinkGoogleAccountTest extends AuthTestCase
 
     protected function assertAccountLinkedTo(string $googleSubject): void
     {
-        $this->assertSame($googleSubject, $this->alice->fresh()?->google_id);
+        $this->assertSame($googleSubject, $this->user->fresh()?->google_id);
 
-        $linked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
         $this->assertSame(
-            ['userId' => $this->alice->getKey(), 'googleSubjectId' => $googleSubject],
-            Arr::only($linked->event_properties, ['userId', 'googleSubjectId']),
+            ['userId' => $this->user->getKey(), 'googleSubjectId' => $googleSubject],
+            Arr::only($eloquentStoredEvent->event_properties, ['userId', 'googleSubjectId']),
         );
     }
 
-    protected function assertLinkRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $code): void
+    protected function assertLinkRefusedWith(TestResponse $response, int $expectedStatus, ApiErrorCode $apiErrorCode): void
     {
-        $this->assertRefusedWith($response, $expectedStatus, $code);
-        $this->assertNull($this->alice->fresh()?->google_id, 'A refused link must leave the account unlinked.');
-        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $this->alice->getKey())->count());
+        $this->assertRefusedWith($response, $expectedStatus, $apiErrorCode);
+        $this->assertNull($this->user->fresh()?->google_id, 'A refused link must leave the account unlinked.');
+        $this->assertSame(0, LesilyStoredEvent::query()->where('aggregate_uuid', $this->user->getKey())->count());
     }
 }

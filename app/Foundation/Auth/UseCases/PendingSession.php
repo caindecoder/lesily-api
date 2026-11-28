@@ -11,6 +11,6 @@ class PendingSession
     public function __construct(
         public readonly User $user,
         public readonly string $deviceName,
-        public readonly ?AccessEventReason $factor = null,
+        public readonly ?AccessEventReason $accessEventReason = null,
     ) {}
 }

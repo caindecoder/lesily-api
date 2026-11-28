@@ -25,12 +25,12 @@ class ActiveSessions
      */
     public static function constrain(User $user): MorphMany
     {
-        $windowStart = now()->subMinutes(Config::integer('sanctum.expiration'));
+        $windowStartsAt = now()->subMinutes(Config::integer('sanctum.expiration'));
 
         return $user->tokens()
-            ->where(function (Builder $query): void {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            ->where(function (Builder $builder): void {
+                $builder->whereNull('expires_at')->orWhere('expires_at', '>', now());
             })
-            ->where('created_at', '>', $windowStart);
+            ->where('created_at', '>', $windowStartsAt);
     }
 }

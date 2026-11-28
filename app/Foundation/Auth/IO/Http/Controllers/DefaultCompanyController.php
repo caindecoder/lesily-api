@@ -19,24 +19,24 @@ use App\Foundation\Auth\UseCases\Interactors\ClearDefaultCompanyInteractor;
  */
 class DefaultCompanyController extends Controller
 {
-    public function update(Request $request, SetDefaultCompanyInteractor $interactor): Response
+    public function update(Request $request, SetDefaultCompanyInteractor $setDefaultCompanyInteractor): Response
     {
-        $command = SetDefaultCompanyCommand::validateAndCreate($request);
+        $setDefaultCompanyCommand = SetDefaultCompanyCommand::validateAndCreate($request);
 
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user, $command);
+        $setDefaultCompanyInteractor->execute($user, $setDefaultCompanyCommand);
 
         return response()->noContent();
     }
 
-    public function destroy(Request $request, ClearDefaultCompanyInteractor $interactor): Response
+    public function destroy(Request $request, ClearDefaultCompanyInteractor $clearDefaultCompanyInteractor): Response
     {
         /** @var User $user */
         $user = $request->user();
 
-        $interactor->execute($user);
+        $clearDefaultCompanyInteractor->execute($user);
 
         return response()->noContent();
     }

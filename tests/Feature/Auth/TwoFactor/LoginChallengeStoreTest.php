@@ -23,10 +23,10 @@ class LoginChallengeStoreTest extends AuthTestCase
         Cache::put("2fa-challenge:{$challengeId}", ['userId' => (string) Str::uuid()]);
 
         // When the challenge is resolved
-        $challenge = $this->store()->find($challengeId);
+        $twoFactorChallenge = $this->store()->find($challengeId);
 
         // Then it does not resolve
-        $this->assertNull($challenge, 'A half-shaped challenge payload must not resolve.');
+        $this->assertNull($twoFactorChallenge, 'A half-shaped challenge payload must not resolve.');
     }
 
     #[Test]
@@ -123,11 +123,11 @@ class LoginChallengeStoreTest extends AuthTestCase
         Cache::put("2fa-challenge:{$challengeId}", ['userId' => 'a-user', 'attemptsRemaining' => 5, 'expiresAt' => now()->addMinutes(5)->getTimestamp()]);
 
         // When the challenge is resolved
-        $challenge = $this->store()->find($challengeId);
+        $twoFactorChallenge = $this->store()->find($challengeId);
 
         // Then it resolves with no pending link
-        $this->assertNotNull($challenge);
-        $this->assertNull($challenge->pendingGoogleSubjectId);
+        $this->assertNotNull($twoFactorChallenge);
+        $this->assertNull($twoFactorChallenge->pendingGoogleSubjectId);
     }
 
     #[Test]
@@ -138,12 +138,12 @@ class LoginChallengeStoreTest extends AuthTestCase
         $this->store()->recordFailure($challengeId);
 
         // When the challenge is resolved
-        $challenge = $this->store()->find($challengeId);
+        $twoFactorChallenge = $this->store()->find($challengeId);
 
         // Then it still carries the pending link, one attempt down
-        $this->assertNotNull($challenge);
-        $this->assertSame('a-google-subject', $challenge->pendingGoogleSubjectId);
-        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS - 1, $challenge->attemptsRemaining);
+        $this->assertNotNull($twoFactorChallenge);
+        $this->assertSame('a-google-subject', $twoFactorChallenge->pendingGoogleSubjectId);
+        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS - 1, $twoFactorChallenge->attemptsRemaining);
     }
 
     #[Test]
@@ -154,12 +154,12 @@ class LoginChallengeStoreTest extends AuthTestCase
         $challengeId = $this->store()->create($userId);
 
         // When the challenge is resolved
-        $challenge = $this->store()->find($challengeId);
+        $twoFactorChallenge = $this->store()->find($challengeId);
 
         // Then it resolves to that user with a full attempt allowance
-        $this->assertNotNull($challenge, 'A created challenge must resolve.');
-        $this->assertSame($userId, $challenge->userId);
-        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS, $challenge->attemptsRemaining);
+        $this->assertNotNull($twoFactorChallenge, 'A created challenge must resolve.');
+        $this->assertSame($userId, $twoFactorChallenge->userId);
+        $this->assertSame(LoginChallengeStore::MAX_ATTEMPTS, $twoFactorChallenge->attemptsRemaining);
     }
 
     #[Test]

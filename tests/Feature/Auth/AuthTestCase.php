@@ -122,15 +122,15 @@ abstract class AuthTestCase extends TestCase
     }
 
     /** Bind a Google ID-token verifier double: it reads the given identity, or refuses the token when null. */
-    protected function fakeGoogleIdTokenVerifier(?GoogleIdentity $identity): void
+    protected function fakeGoogleIdTokenVerifier(?GoogleIdentity $googleIdentity): void
     {
-        $this->app->instance(GoogleIdTokenVerifier::class, new class($identity) implements GoogleIdTokenVerifier
+        $this->app->instance(GoogleIdTokenVerifier::class, new class($googleIdentity) implements GoogleIdTokenVerifier
         {
-            public function __construct(private ?GoogleIdentity $identity) {}
+            public function __construct(private ?GoogleIdentity $googleIdentity) {}
 
             public function verify(string $idToken): GoogleIdentity
             {
-                return $this->identity ?? throw new GoogleTokenInvalidException;
+                return $this->googleIdentity ?? throw new GoogleTokenInvalidException;
             }
         });
     }
@@ -233,14 +233,14 @@ abstract class AuthTestCase extends TestCase
     }
 
     /**
-     * Make $user a member of a company on $plan (the company_user pivot). The device cap
+     * Make $user a member of a company on $billingPlan (the company_user pivot). The device cap
      * is plan-only, so the membership role is irrelevant — a freshly-created role just
      * satisfies the pivot's required role_id. Shared by the login + 2FA-verify device-cap
      * suites (UC-1-002 alt-5a).
      */
-    protected function memberOfCompanyOnPlan(User $user, BillingPlan $plan): void
+    protected function memberOfCompanyOnPlan(User $user, BillingPlan $billingPlan): void
     {
-        $this->attachMember(Company::factory()->onPlan($plan)->create(), $user, Role::factory()->create());
+        $this->attachMember(Company::factory()->onPlan($billingPlan)->create(), $user, Role::factory()->create());
     }
 
     protected function memberOfTrialCompany(User $user): void
@@ -263,12 +263,12 @@ abstract class AuthTestCase extends TestCase
         $this->attachMember($this->employingCompany, $user, $this->seededRole('employee'));
     }
 
-    protected function assertAuditedInEachCompany(TestResponse $response, User $user, AuditAction $action): void
+    protected function assertAuditedInEachCompany(TestResponse $response, User $user, AuditAction $auditAction): void
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        [$eventClass, $words] = $this->expectedSecurityRecordOf($action);
-        $storedEvent = LesilyStoredEvent::query()
+        [$eventClass, $words] = $this->expectedSecurityRecordOf($auditAction);
+        $eloquentStoredEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $user->getKey())
             ->where('event_class', $eventClass)
             ->sole();
@@ -277,12 +277,12 @@ abstract class AuthTestCase extends TestCase
         foreach ([[$this->ownedCompany, 'owner'], [$this->employingCompany, 'employee']] as [$company, $roleCode]) {
             $this->assertDatabaseHas('audit_trail', [
                 'company_id' => $company->getKey(),
-                'stored_event_id' => $storedEvent->getKey(),
+                'stored_event_id' => $eloquentStoredEvent->getKey(),
                 'event_class' => class_basename($eventClass),
                 'subject_type' => 'user',
                 'subject_id' => $user->getKey(),
                 'subject_label' => null,
-                'action' => $action->value,
+                'action' => $auditAction->value,
                 'description' => $words,
                 'actor_user_id' => $user->getKey(),
                 'actor_role_code' => $roleCode,
@@ -301,19 +301,19 @@ abstract class AuthTestCase extends TestCase
     {
         $requestId = $response->headers->get('Correlation-Id');
         $this->assertIsString($requestId);
-        $storedEvent = LesilyStoredEvent::query()
+        $eloquentStoredEvent = LesilyStoredEvent::query()
             ->where('aggregate_uuid', $user->getKey())
             ->where('event_class', UserProfileUpdated::class)
             ->sole();
-        $entries = AuditEntry::query()->where('action', AuditAction::ProfileUpdated)->get()->keyBy('company_id');
-        $this->assertCount(2, $entries);
+        $auditEntries = AuditEntry::query()->where('action', AuditAction::ProfileUpdated)->get()->keyBy('company_id');
+        $this->assertCount(2, $auditEntries);
         ksort($changes);
 
         foreach ([[$this->ownedCompany, 'owner'], [$this->employingCompany, 'employee']] as [$company, $roleCode]) {
-            $entry = $entries->get($company->getKey());
-            $this->assertInstanceOf(AuditEntry::class, $entry);
+            $auditEntry = $auditEntries->get($company->getKey());
+            $this->assertInstanceOf(AuditEntry::class, $auditEntry);
             $this->assertSame([
-                'stored_event_id' => $storedEvent->getKey(),
+                'stored_event_id' => $eloquentStoredEvent->getKey(),
                 'subject' => ['user', $user->getKey(), null],
                 'description' => 'Profile updated',
                 'actor' => [$user->getKey(), $roleCode, $user->name],
@@ -321,27 +321,27 @@ abstract class AuthTestCase extends TestCase
                 'changes' => $changes,
                 'severity' => 'info',
             ], [
-                'stored_event_id' => $entry->stored_event_id,
-                'subject' => [$entry->subject_type->value, $entry->subject_id, $entry->subject_label],
-                'description' => $entry->description,
-                'actor' => [$entry->actor_user_id, $entry->actor_role_code, $entry->actor_label],
-                'origin' => [$entry->ip_address, $entry->user_agent, $entry->request_id],
-                'changes' => $this->changesOf($entry),
-                'severity' => $entry->severity,
+                'stored_event_id' => $auditEntry->stored_event_id,
+                'subject' => [$auditEntry->subject_type->value, $auditEntry->subject_id, $auditEntry->subject_label],
+                'description' => $auditEntry->description,
+                'actor' => [$auditEntry->actor_user_id, $auditEntry->actor_role_code, $auditEntry->actor_label],
+                'origin' => [$auditEntry->ip_address, $auditEntry->user_agent, $auditEntry->request_id],
+                'changes' => $this->changesOf($auditEntry),
+                'severity' => $auditEntry->severity,
             ]);
         }
     }
 
     /** @return array{class-string, string} */
-    protected function expectedSecurityRecordOf(AuditAction $action): array
+    protected function expectedSecurityRecordOf(AuditAction $auditAction): array
     {
-        return match ($action) {
+        return match ($auditAction) {
             AuditAction::PasswordChanged => [UserPasswordChanged::class, 'Password changed'],
             AuditAction::PasswordReset => [UserPasswordReset::class, 'Password reset completed'],
             AuditAction::TwoFactorEnabled => [User2FAEnabled::class, '2FA enabled'],
             AuditAction::TwoFactorDisabled => [User2FADisabled::class, '2FA disabled'],
             AuditAction::RecoveryCodesRegenerated => [User2FARecoveryCodesRegenerated::class, '2FA recovery codes regenerated'],
-            default => throw new RuntimeException("No expected record for {$action->value}."),
+            default => throw new RuntimeException("No expected record for {$auditAction->value}."),
         };
     }
 
@@ -596,10 +596,10 @@ abstract class AuthTestCase extends TestCase
 
     protected function assertGoogleLinkedWith(User $user, string $googleSubject): void
     {
-        $linked = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
+        $eloquentStoredEvent = LesilyStoredEvent::query()->where('event_class', UserGoogleOAuthLinked::class)->sole();
         $this->assertEquals(
             ['userId' => $user->getKey(), 'googleSubjectId' => $googleSubject, 'linkedAt' => now()->toAtomString()],
-            Arr::only($linked->event_properties, ['userId', 'googleSubjectId', 'linkedAt']),
+            Arr::only($eloquentStoredEvent->event_properties, ['userId', 'googleSubjectId', 'linkedAt']),
         );
         $this->assertSame($googleSubject, $user->fresh()?->google_id);
     }
@@ -651,9 +651,9 @@ abstract class AuthTestCase extends TestCase
             ->assertUnauthorized();
 
         Auth::forgetGuards();
-        $newLogin = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
-        $newLogin->assertOk();
-        $this->assertNotEmpty($newLogin->json('data.token'), 'The new password must authenticate and issue a session.');
+        $response = $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => $newPassword]);
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('data.token'), 'The new password must authenticate and issue a session.');
     }
 
     /**
