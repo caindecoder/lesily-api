@@ -32,7 +32,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     {
         // Given company A
         // When a caller with no token views company A's audit logs
-        $response = $this->viewAuditLogs(null, $this->companyA);
+        $response = $this->viewAuditLogs(null, $this->contosoCompany);
 
         // Then they are refused as unauthenticated and no row is shown
         $this->assertUnauthenticated($response);
@@ -46,7 +46,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         $member = $this->memberWithRole($roleCode);
 
         // When the member views company A's audit logs
-        $response = $this->viewAuditLogs($member, $this->companyA);
+        $response = $this->viewAuditLogs($member, $this->contosoCompany);
 
         // Then the role is refused and no row is shown
         $this->assertRoleInsufficient($response, 'audit.view');
@@ -57,10 +57,10 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_member_views_another_company_audit_logs_then_it_is_refused(): void
     {
         // Given the owner of company B
-        $outsider = $this->aCompanyMember($this->companyB, 'owner');
+        $actor = $this->aCompanyMember($this->otherCompany, 'owner');
 
         // When B's owner views company A's audit logs
-        $response = $this->viewAuditLogs($outsider, $this->companyA);
+        $response = $this->viewAuditLogs($actor, $this->contosoCompany);
 
         // Then access to company A is denied and no row is shown
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
@@ -74,7 +74,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         config(['lesily.policies.privacy' => 'v1.1']);
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the audit logs are refused until they accept, and no row is shown
         $this->assertRefusedWith($response, Response::HTTP_FORBIDDEN, ApiErrorCode::ConsentRequired);
@@ -91,7 +91,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         // Given company A's owner
 
         // When the owner views company A's audit logs with an invalid query
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, $query);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, $query);
 
         // Then the query is refused with the reason
         $this->assertValidationRejected($response, $field, $message);
@@ -124,10 +124,10 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_company_has_no_logs_then_an_empty_list_with_its_start_is_shown(): void
     {
         // Given company A, on the Free plan, with no sign-in or security record
-        $this->putOnPlan($this->companyA, BillingPlan::Free);
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Free);
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then nothing is listed, and the list starts one year back
         $this->assertNothingListed($response);
@@ -138,16 +138,16 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_another_company_has_logs_then_only_this_company_logs_are_shown(): void
     {
         // Given company A and company B each have a sign-in and a password change
-        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
-        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
-        AccessLogEntry::factory()->forCompany($this->companyB)->create();
-        AuditEntry::factory()->forCompany($this->companyB)->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)->create();
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $auditEntry = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
+        AccessLogEntry::factory()->forCompany($this->otherCompany)->create();
+        AuditEntry::factory()->forCompany($this->otherCompany)->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)->create();
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then only company A's two rows are listed, newest first
-        $this->assertEntriesListed($response, [$signIn->getKey(), $passwordChange->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey(), $auditEntry->getKey()]);
     }
 
     #[Test]
@@ -155,13 +155,13 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     {
         // Given a member of company A refused at another company's door (a row with no company), and a sign-in in A
         AccessLogEntry::factory()->byUser($this->owner)->ofEvent(AccessEvent::Forbidden)->create();
-        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then only the company's own row is listed
-        $this->assertEntriesListed($response, [$signIn->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey()]);
     }
 
     #[Test]
@@ -170,27 +170,27 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         // Given company A recorded an invitation, a data request and a password change
         $this->anEntryOfCompanyAFor(AuditAction::UserInvited, AuditSubjectType::Invitation);
         $this->anEntryOfCompanyAFor(AuditAction::DsarRequested, AuditSubjectType::DsarRequest);
-        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
+        $auditEntry = $this->aSecurityEntryOfCompanyAAt('2026-11-15 09:00:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then only the password change is listed
-        $this->assertEntriesListed($response, [$passwordChange->getKey()]);
+        $this->assertEntriesListed($response, [$auditEntry->getKey()]);
     }
 
     #[Test]
     public function when_rows_share_a_time_then_the_newer_id_comes_first(): void
     {
         // Given a sign-in and a password change in company A at the same second
-        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 10:00:00');
-        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $auditEntry = $this->aSecurityEntryOfCompanyAAt('2026-11-15 10:00:00');
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the row with the newer id comes first
-        $this->assertEntriesListed($response, $this->newestIdFirst([$passwordChange->getKey(), $signIn->getKey()]));
+        $this->assertEntriesListed($response, $this->newestIdFirst([$auditEntry->getKey(), $accessLogEntry->getKey()]));
     }
 
     #[Test]
@@ -206,7 +206,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         ];
 
         // When the owner views the second page of two
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['per_page' => 2, 'page' => 2]);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['per_page' => 2, 'page' => 2]);
 
         // Then the page holds the third and fourth rows, and says where it is
         $this->assertEntriesListed($response, [$rows[2]->getKey(), $rows[3]->getKey()]);
@@ -217,10 +217,10 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_no_page_size_is_given_then_fifteen_rows_are_shown(): void
     {
         // Given sixteen sign-ins in company A
-        AccessLogEntry::factory()->count(16)->forCompany($this->companyA)->create();
+        AccessLogEntry::factory()->count(16)->forCompany($this->contosoCompany)->create();
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then fifteen rows are shown on the first of two pages
         $response->assertJsonCount(15, 'data');
@@ -231,10 +231,10 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_page_of_one_hundred_is_asked_then_it_is_given(): void
     {
         // Given one hundred and one sign-ins in company A
-        AccessLogEntry::factory()->count(101)->forCompany($this->companyA)->create();
+        AccessLogEntry::factory()->count(101)->forCompany($this->contosoCompany)->create();
 
         // When the owner asks for pages of one hundred
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['per_page' => 100]);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['per_page' => 100]);
 
         // Then one hundred rows are shown
         $response->assertJsonCount(100, 'data');
@@ -245,15 +245,15 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_page_is_sent_outside_the_query_string_then_it_is_ignored(): void
     {
         // Given two sign-ins in company A
-        $newer = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
         $this->anAccessRowOfCompanyAAt('2026-11-15 09:00:00');
         Sanctum::actingAs($this->owner);
 
         // When the owner asks for pages of one, with page 2 in the request body
-        $response = $this->json('GET', '/api/v1/audit-logs?per_page=1', ['page' => 2], ['X-Company-Context' => $this->companyA->getKey()]);
+        $response = $this->json('GET', '/api/v1/audit-logs?per_page=1', ['page' => 2], ['X-Company-Context' => $this->contosoCompany->getKey()]);
 
         // Then the first page is shown
-        $this->assertEntriesListed($response, [$newer->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey()]);
     }
 
     #[Test]
@@ -261,32 +261,32 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     {
         // Given company A on the Free plan, with a sign-in and a password change at the first moment it keeps,
         // and one of each a second earlier
-        $this->putOnPlan($this->companyA, BillingPlan::Free);
-        $signInInside = $this->anAccessRowOfCompanyAAt('2025-11-15 00:00:00');
-        $passwordChangeInside = $this->aSecurityEntryOfCompanyAAt('2025-11-15 00:00:00');
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Free);
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2025-11-15 00:00:00');
+        $auditEntry = $this->aSecurityEntryOfCompanyAAt('2025-11-15 00:00:00');
         $this->anAccessRowOfCompanyAAt('2025-11-14 23:59:59');
         $this->aSecurityEntryOfCompanyAAt('2025-11-14 23:59:59');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then only the two rows inside the year are listed
-        $this->assertEntriesListed($response, $this->newestIdFirst([$signInInside->getKey(), $passwordChangeInside->getKey()]));
+        $this->assertEntriesListed($response, $this->newestIdFirst([$accessLogEntry->getKey(), $auditEntry->getKey()]));
     }
 
     #[Test]
     public function when_the_dates_reach_past_the_horizon_then_the_list_is_clamped_to_it(): void
     {
         // Given company A on the Free plan, with a sign-in inside its year and one before it
-        $this->putOnPlan($this->companyA, BillingPlan::Free);
-        $inside = $this->anAccessRowOfCompanyAAt('2026-06-01 12:00:00');
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Free);
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-06-01 12:00:00');
         $this->anAccessRowOfCompanyAAt('2025-06-01 12:00:00');
 
         // When the owner asks for the audit logs from 2024
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['within' => '2024-01-01,2026-11-15']);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['within' => '2024-01-01,2026-11-15']);
 
         // Then only the row inside the plan's year is listed, and the list says where it starts
-        $this->assertEntriesListed($response, [$inside->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey()]);
         $this->assertListStartsOn($response, '2025-11-15');
     }
 
@@ -294,11 +294,11 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_dates_lie_wholly_before_the_horizon_then_the_list_is_empty(): void
     {
         // Given company A on the Free plan, with a sign-in in 2024
-        $this->putOnPlan($this->companyA, BillingPlan::Free);
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Free);
         $this->anAccessRowOfCompanyAAt('2024-06-01 12:00:00');
 
         // When the owner asks for the audit logs of 2024
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['within' => '2024-01-01,2024-12-31']);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['within' => '2024-01-01,2024-12-31']);
 
         // Then nothing is listed, and the list says where it starts
         $this->assertNothingListed($response);
@@ -309,11 +309,11 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_horizon_falls_on_a_leap_day_then_it_starts_on_the_last_day_of_february(): void
     {
         // Given company A on the Free plan, viewed on 29 February 2028
-        $this->putOnPlan($this->companyA, BillingPlan::Free);
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Free);
         $this->travelTo('2028-02-29 10:00:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the year it keeps starts on 28 February 2027, never in March
         $response->assertOk();
@@ -324,19 +324,19 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_folded_refusal_is_listed_then_its_count_and_first_time_are_shown(): void
     {
         // Given a refusal first seen at 14:02 and repeated six times until 14:06, and a password change at 14:04
-        $refusals = AccessLogEntry::factory()
-            ->forCompany($this->companyA)
+        $accessLogEntry = AccessLogEntry::factory()
+            ->forCompany($this->contosoCompany)
             ->ofEvent(AccessEvent::Forbidden)
             ->seenAt(CarbonImmutable::parse('2026-11-15 14:06:00'))
             ->foldedSince(CarbonImmutable::parse('2026-11-15 14:02:00'), 6)
             ->create();
-        $passwordChange = $this->aSecurityEntryOfCompanyAAt('2026-11-15 14:04:00');
+        $auditEntry = $this->aSecurityEntryOfCompanyAAt('2026-11-15 14:04:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the refusals come first, by their last time, with their count and first time
-        $this->assertEntriesListed($response, [$refusals->getKey(), $passwordChange->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey(), $auditEntry->getKey()]);
         $this->assertRowShows($response, 0, [
             'time' => '2026-11-15T14:06:00.000000Z',
             'first_seen_at' => '2026-11-15T14:02:00.000000Z',
@@ -348,12 +348,12 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_staff_member_changed_a_role_then_it_is_shown_as_lesily_support(): void
     {
         // Given Lesily staff changed a role in company A, from their own address and device
-        AuditEntry::factory()->forCompany($this->companyA)->byStaff(User::factory()->named('Sam Staff')->create())
+        AuditEntry::factory()->forCompany($this->contosoCompany)->byStaff(User::factory()->named('Sam Staff')->create())
             ->ofAction(AuditAction::RoleChanged, AuditSubjectType::User)
             ->fromOrigin('192.0.2.44', 'StaffConsole/1')->create();
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the change shows as Lesily support, never the staff member, their address or device
         $this->assertRowShows($response, 0, [
@@ -369,10 +369,10 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_the_user_of_a_row_is_unknown_then_no_user_name_is_shown(?string $userId): void
     {
         // Given a refusal in company A whose user is unknown to the accounts
-        AccessLogEntry::factory()->forCompany($this->companyA)->ofEvent(AccessEvent::NotFound)->forUserId($userId)->create();
+        AccessLogEntry::factory()->forCompany($this->contosoCompany)->ofEvent(AccessEvent::NotFound)->forUserId($userId)->create();
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the row keeps the stored user id and shows no name
         $this->assertRowShows($response, 0, ['user_id' => $userId, 'user_name' => null]);
@@ -392,46 +392,43 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     #[Test]
     public function when_the_company_has_sign_ins_and_security_changes_then_they_are_listed_together_newest_first(): void
     {
-        // Given company A recorded, out of time order, Carol's failed sign-in at 11:00, Alice's password change at 09:00
-        // and Bob's sign-in at 10:00, each from its own address and device
-        $carol = User::factory()->named('Carol')->create();
-        $alice = User::factory()->named('Alice')->create();
-        $bob = User::factory()->named('Bob')->create();
-        $failedSignIn = AccessLogEntry::factory()->forCompany($this->companyA)->byUser($carol)
+        // Given company A recorded, out of time order, the member's failed sign-in at 11:00, the admin's password change
+        // at 09:00 and the owner's sign-in at 10:00, each from its own address and device
+        $failedSignInAccessLogEntry = AccessLogEntry::factory()->forCompany($this->contosoCompany)->byUser($this->member)
             ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
             ->seenAt(CarbonImmutable::parse('2026-11-15 11:00:00'))->fromOrigin('203.0.113.9', 'Firefox/140')->create();
-        $passwordChange = AuditEntry::factory()->forCompany($this->companyA)->byMember($alice, 'admin')
+        $passwordChangeAuditEntry = AuditEntry::factory()->forCompany($this->contosoCompany)->byMember($this->admin, 'admin')
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse('2026-11-15 09:00:00'))->fromOrigin('198.51.100.20', 'Chrome/141')->create();
-        $signIn = AccessLogEntry::factory()->forCompany($this->companyA)->byUser($bob)
+        $signInAccessLogEntry = AccessLogEntry::factory()->forCompany($this->contosoCompany)->byUser($this->owner)
             ->seenAt(CarbonImmutable::parse('2026-11-15 10:00:00'))->fromOrigin('203.0.113.5', 'Safari/18')->create();
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the three rows are listed together, newest first, each with what happened, who, when and where
         $response->assertOk();
         $this->assertSame([
             [
-                'id' => $failedSignIn->getKey(), 'kind' => 'access',
+                'id' => $failedSignInAccessLogEntry->getKey(), 'kind' => 'access',
                 'time' => '2026-11-15T11:00:00.000000Z', 'first_seen_at' => '2026-11-15T11:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $carol->getKey(), 'user_name' => 'Carol',
+                'user_id' => $this->member->getKey(), 'user_name' => $this->member->name,
                 'event' => 'login_failed', 'event_words' => 'Sign-in failed',
                 'outcome' => 'wrong_password', 'outcome_words' => 'Wrong password',
                 'ip_address' => '203.0.113.9', 'device' => 'Firefox/140',
             ],
             [
-                'id' => $signIn->getKey(), 'kind' => 'access',
+                'id' => $signInAccessLogEntry->getKey(), 'kind' => 'access',
                 'time' => '2026-11-15T10:00:00.000000Z', 'first_seen_at' => '2026-11-15T10:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $bob->getKey(), 'user_name' => 'Bob',
+                'user_id' => $this->owner->getKey(), 'user_name' => $this->owner->name,
                 'event' => 'login_succeeded', 'event_words' => 'Signed in',
                 'outcome' => null, 'outcome_words' => null,
                 'ip_address' => '203.0.113.5', 'device' => 'Safari/18',
             ],
             [
-                'id' => $passwordChange->getKey(), 'kind' => 'audit',
+                'id' => $passwordChangeAuditEntry->getKey(), 'kind' => 'audit',
                 'time' => '2026-11-15T09:00:00.000000Z', 'first_seen_at' => '2026-11-15T09:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $alice->getKey(), 'user_name' => 'Alice',
+                'user_id' => $this->admin->getKey(), 'user_name' => $this->admin->name,
                 'event' => 'password_changed', 'event_words' => 'Password changed',
                 'outcome' => null, 'outcome_words' => null,
                 'ip_address' => '198.51.100.20', 'device' => 'Chrome/141',
@@ -441,16 +438,16 @@ class ViewAuditLogsTest extends AuditTrailTestCase
 
     #[Test]
     #[DataProvider('provideSecurityActions')]
-    public function when_a_security_change_is_recorded_then_it_is_listed(AuditAction $action, AuditSubjectType $subjectType): void
+    public function when_a_security_change_is_recorded_then_it_is_listed(AuditAction $auditAction, AuditSubjectType $auditSubjectType): void
     {
         // Given company A recorded the security change, and its owner
-        $entry = $this->anEntryOfCompanyAFor($action, $subjectType);
+        $auditEntry = $this->anEntryOfCompanyAFor($auditAction, $auditSubjectType);
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the change is listed
-        $this->assertEntriesListed($response, [$entry->getKey()]);
+        $this->assertEntriesListed($response, [$auditEntry->getKey()]);
     }
 
     /**
@@ -475,14 +472,14 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_permitted_roles_view_then_the_logs_are_shown(string $roleCode): void
     {
         // Given a sign-in in company A, and a member of A whose role may view the audit logs
-        $signIn = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
+        $accessLogEntry = $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
         $member = $this->memberWithRole($roleCode);
 
         // When the member views company A's audit logs
-        $response = $this->viewAuditLogs($member, $this->companyA);
+        $response = $this->viewAuditLogs($member, $this->contosoCompany);
 
         // Then the sign-in is listed
-        $this->assertEntriesListed($response, [$signIn->getKey()]);
+        $this->assertEntriesListed($response, [$accessLogEntry->getKey()]);
     }
 
     #[Test]
@@ -492,7 +489,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
         $this->anAccessRowOfCompanyAAt('2026-11-15 10:00:00');
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then the view leaves no audit-trail row
         $response->assertOk();
@@ -503,18 +500,18 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_a_member_signs_in_then_the_sign_in_reaches_the_company_audit_logs(): void
     {
         // Given Alice, a member of company A and of company B, and A's owner
-        $alice = User::factory()->named('Alice')->withPassword('Str0ng-Pass!')->create();
-        $employee = Role::query()->where('code', 'employee')->sole();
-        $this->attachMember($this->companyA, $alice, $employee);
-        $this->attachMember($this->companyB, $alice, $employee);
-        $this->postJson('/api/v1/auth/login', ['email' => $alice->email, 'password' => 'Str0ng-Pass!']);
+        $member = User::factory()->named('Alice')->withPassword('Str0ng-Pass!')->create();
+        $role = Role::query()->where('code', 'employee')->sole();
+        $this->attachMember($this->contosoCompany, $member, $role);
+        $this->attachMember($this->otherCompany, $member, $role);
+        $this->postJson('/api/v1/auth/login', ['email' => $member->email, 'password' => 'Str0ng-Pass!']);
 
         // When the owner views company A's audit logs
-        $response = $this->viewAuditLogs($this->owner, $this->companyA);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany);
 
         // Then Alice's sign-in is listed
         $response->assertJsonCount(1, 'data');
-        $this->assertRowShows($response, 0, ['kind' => 'access', 'user_id' => $alice->getKey(), 'user_name' => 'Alice', 'event' => 'login_succeeded']);
+        $this->assertRowShows($response, 0, ['kind' => 'access', 'user_id' => $member->getKey(), 'user_name' => 'Alice', 'event' => 'login_succeeded']);
     }
 
     /**
@@ -553,23 +550,23 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public function when_filtered_by_date_then_only_rows_in_range_are_listed(): void
     {
         // Given company A on Enterprise, with a sign-in and a password change on each side of each end of April
-        $this->putOnPlan($this->companyA, BillingPlan::Enterprise);
+        $this->putOnPlan($this->contosoCompany, BillingPlan::Enterprise);
         $this->anAccessRowOfCompanyAAt('2026-03-31 23:59:59');
         $this->aSecurityEntryOfCompanyAAt('2026-03-31 23:59:59');
-        $firstSignIn = $this->anAccessRowOfCompanyAAt('2026-04-01 00:00:00');
-        $firstPasswordChange = $this->aSecurityEntryOfCompanyAAt('2026-04-01 00:00:00');
-        $lastSignIn = $this->anAccessRowOfCompanyAAt('2026-04-30 23:59:59');
-        $lastPasswordChange = $this->aSecurityEntryOfCompanyAAt('2026-04-30 23:59:59');
+        $firstSignInAccessLogEntry = $this->anAccessRowOfCompanyAAt('2026-04-01 00:00:00');
+        $firstPasswordChangeAuditEntry = $this->aSecurityEntryOfCompanyAAt('2026-04-01 00:00:00');
+        $lastSignInAccessLogEntry = $this->anAccessRowOfCompanyAAt('2026-04-30 23:59:59');
+        $lastPasswordChangeAuditEntry = $this->aSecurityEntryOfCompanyAAt('2026-04-30 23:59:59');
         $this->anAccessRowOfCompanyAAt('2026-05-01 00:00:00');
         $this->aSecurityEntryOfCompanyAAt('2026-05-01 00:00:00');
 
         // When the owner views the audit logs within April
-        $response = $this->viewAuditLogs($this->owner, $this->companyA, ['within' => '2026-04-01,2026-04-30']);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['within' => '2026-04-01,2026-04-30']);
 
         // Then both ends of April are inside, newest first, and nothing outside
         $this->assertEntriesListed($response, [
-            ...$this->newestIdFirst([$lastSignIn->getKey(), $lastPasswordChange->getKey()]),
-            ...$this->newestIdFirst([$firstSignIn->getKey(), $firstPasswordChange->getKey()]),
+            ...$this->newestIdFirst([$lastSignInAccessLogEntry->getKey(), $lastPasswordChangeAuditEntry->getKey()]),
+            ...$this->newestIdFirst([$firstSignInAccessLogEntry->getKey(), $firstPasswordChangeAuditEntry->getKey()]),
         ]);
     }
 
@@ -579,12 +576,12 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     public static function providePlansAndTheirHorizons(): array
     {
         return [
-            'free keeps one year' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Free), '2025-11-15'],
-            'starter keeps one year' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Starter), '2025-11-15'],
-            'pro keeps three years' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Pro), '2023-11-15'],
-            'enterprise keeps seven years' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Enterprise), '2019-11-15'],
-            'the trial keeps seven years' => [fn (CompanyFactory $company) => $company->onTrial(), '2019-11-15'],
-            'an expired trial keeps one year' => [fn (CompanyFactory $company) => $company->trialExpired(), '2025-11-15'],
+            'free keeps one year' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Free), '2025-11-15'],
+            'starter keeps one year' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Starter), '2025-11-15'],
+            'pro keeps three years' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Pro), '2023-11-15'],
+            'enterprise keeps seven years' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Enterprise), '2019-11-15'],
+            'the trial keeps seven years' => [fn (CompanyFactory $companyFactory) => $companyFactory->onTrial(), '2019-11-15'],
+            'an expired trial keeps one year' => [fn (CompanyFactory $companyFactory) => $companyFactory->trialExpired(), '2025-11-15'],
         ];
     }
 

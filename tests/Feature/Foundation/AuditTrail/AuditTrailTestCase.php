@@ -19,9 +19,9 @@ abstract class AuditTrailTestCase extends FoundationTestCase
 {
     use FreeTierCompany;
 
-    protected Company $companyA;
+    protected Company $contosoCompany;
 
-    protected Company $companyB;
+    protected Company $otherCompany;
 
     protected function setUp(): void
     {
@@ -30,14 +30,14 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         config(['app.debug' => false]);
         $this->travelTo('2026-11-15 14:30:00');
         $this->makeFreeTierCompany();
-        $this->companyA = $this->company;
-        $this->companyB = Company::factory()->create();
+        $this->contosoCompany = $this->company;
+        $this->otherCompany = Company::factory()->create();
     }
 
     protected function anEntryOfCompanyAAt(string $recordedAt): AuditEntry
     {
         return AuditEntry::factory()
-            ->forCompany($this->companyA)
+            ->forCompany($this->contosoCompany)
             ->byMember(User::factory()->create(), 'admin')
             ->recordedAt(CarbonImmutable::parse($recordedAt))
             ->create();
@@ -49,17 +49,17 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     protected function anEntryBy(User $actor): AuditEntryFactory
     {
         return AuditEntry::factory()
-            ->forCompany($this->companyA)
+            ->forCompany($this->contosoCompany)
             ->byMember($actor, 'admin')
             ->ofAction(AuditAction::DsarDownloaded, AuditSubjectType::DsarRequest);
     }
 
-    protected function anEntryOfCompanyAFor(AuditAction $action, AuditSubjectType $subjectType): AuditEntry
+    protected function anEntryOfCompanyAFor(AuditAction $auditAction, AuditSubjectType $auditSubjectType): AuditEntry
     {
         return AuditEntry::factory()
-            ->forCompany($this->companyA)
+            ->forCompany($this->contosoCompany)
             ->byMember(User::factory()->create(), 'admin')
-            ->ofAction($action, $subjectType)
+            ->ofAction($auditAction, $auditSubjectType)
             ->create();
     }
 
@@ -91,7 +91,7 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     {
         Sanctum::actingAs($actor);
 
-        return $this->json($verb, $path, [], ['X-Company-Context' => $this->companyA->getKey()]);
+        return $this->json($verb, $path, [], ['X-Company-Context' => $this->contosoCompany->getKey()]);
     }
 
     /**
@@ -155,7 +155,7 @@ abstract class AuditTrailTestCase extends FoundationTestCase
     protected function anAccessRowOfCompanyAAt(string $lastSeenAt): AccessLogEntry
     {
         return AccessLogEntry::factory()
-            ->forCompany($this->companyA)
+            ->forCompany($this->contosoCompany)
             ->byUser(User::factory()->create())
             ->seenAt(CarbonImmutable::parse($lastSeenAt))
             ->create();
@@ -166,7 +166,7 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $actor = User::factory()->create();
 
         return AuditEntry::factory()
-            ->forCompany($this->companyA)
+            ->forCompany($this->contosoCompany)
             ->byMember($actor, 'admin')
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse($recordedAt))
@@ -181,11 +181,11 @@ abstract class AuditTrailTestCase extends FoundationTestCase
         $this->assertSame($pagination, $response->json('meta.pagination'));
     }
 
-    protected function assertNoActorShown(TestResponse $response, AuditEntry $entry): void
+    protected function assertNoActorShown(TestResponse $response, AuditEntry $auditEntry): void
     {
         $expected = ['actor_id' => null, 'actor_name' => null, 'actor_role' => null, 'actor_role_name' => null];
 
-        $this->assertEntriesListed($response, [$entry->getKey(), ...$this->readyMadeEntryIds()]);
+        $this->assertEntriesListed($response, [$auditEntry->getKey(), ...$this->readyMadeEntryIds()]);
         $this->assertSame($expected, array_intersect_key($response->json('data.0'), $expected));
     }
 
