@@ -392,8 +392,12 @@ class ViewAuditLogsTest extends AuditTrailTestCase
     #[Test]
     public function when_the_company_has_sign_ins_and_security_changes_then_they_are_listed_together_newest_first(): void
     {
-        // Given company A recorded, out of time order, the member's failed sign-in at 11:00, the admin's password change
-        // at 09:00 and the owner's sign-in at 10:00, each from its own address and device
+        // Given the member, the admin and the owner named Carol, Alice and Bob, and company A recorded, out of time order,
+        // Carol's failed sign-in at 11:00, Alice's password change at 09:00 and Bob's sign-in at 10:00, each from its own
+        // address and device
+        $this->member->update(['name' => 'Carol']);
+        $this->admin->update(['name' => 'Alice']);
+        $this->owner->update(['name' => 'Bob']);
         $failedSignInAccessLogEntry = AccessLogEntry::factory()->forCompany($this->contosoCompany)->byUser($this->member)
             ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
             ->seenAt(CarbonImmutable::parse('2026-11-15 11:00:00'))->fromOrigin('203.0.113.9', 'Firefox/140')->create();
@@ -412,7 +416,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
             [
                 'id' => $failedSignInAccessLogEntry->getKey(), 'kind' => 'access',
                 'time' => '2026-11-15T11:00:00.000000Z', 'first_seen_at' => '2026-11-15T11:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $this->member->getKey(), 'user_name' => $this->member->name,
+                'user_id' => $this->member->getKey(), 'user_name' => 'Carol',
                 'event' => 'login_failed', 'event_words' => 'Sign-in failed',
                 'outcome' => 'wrong_password', 'outcome_words' => 'Wrong password',
                 'ip_address' => '203.0.113.9', 'device' => 'Firefox/140',
@@ -420,7 +424,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
             [
                 'id' => $signInAccessLogEntry->getKey(), 'kind' => 'access',
                 'time' => '2026-11-15T10:00:00.000000Z', 'first_seen_at' => '2026-11-15T10:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $this->owner->getKey(), 'user_name' => $this->owner->name,
+                'user_id' => $this->owner->getKey(), 'user_name' => 'Bob',
                 'event' => 'login_succeeded', 'event_words' => 'Signed in',
                 'outcome' => null, 'outcome_words' => null,
                 'ip_address' => '203.0.113.5', 'device' => 'Safari/18',
@@ -428,7 +432,7 @@ class ViewAuditLogsTest extends AuditTrailTestCase
             [
                 'id' => $passwordChangeAuditEntry->getKey(), 'kind' => 'audit',
                 'time' => '2026-11-15T09:00:00.000000Z', 'first_seen_at' => '2026-11-15T09:00:00.000000Z', 'occurrences' => 1,
-                'user_id' => $this->admin->getKey(), 'user_name' => $this->admin->name,
+                'user_id' => $this->admin->getKey(), 'user_name' => 'Alice',
                 'event' => 'password_changed', 'event_words' => 'Password changed',
                 'outcome' => null, 'outcome_words' => null,
                 'ip_address' => '198.51.100.20', 'device' => 'Chrome/141',
