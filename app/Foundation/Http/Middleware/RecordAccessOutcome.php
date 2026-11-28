@@ -9,7 +9,7 @@ use App\Foundation\AccessLog\UseCases\AccessLogRecorder;
 
 class RecordAccessOutcome
 {
-    public function __construct(private readonly AccessLogRecorder $recorder) {}
+    public function __construct(private readonly AccessLogRecorder $accessLogRecorder) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -18,6 +18,6 @@ class RecordAccessOutcome
 
     public function terminate(Request $request, Response $response): void
     {
-        $this->recorder->write($request, $response);
+        $this->accessLogRecorder->write($request, $response);
     }
 }

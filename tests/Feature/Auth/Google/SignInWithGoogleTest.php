@@ -462,7 +462,7 @@ class SignInWithGoogleTest extends AuthTestCase
         $response->assertOk();
         $this->assertTokenNamed($otherUser, 'Pixel 8');
         $this->assertGoogleLinkedWith($otherUser, 'carols-google-subject');
-        Notification::assertSentTo($otherUser, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::GoogleAccountLinked);
+        Notification::assertSentTo($otherUser, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::GoogleAccountLinked);
         $this->assertAccessLogged(AccessEvent::LoginSucceeded, null, $otherUser);
     }
 

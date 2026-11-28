@@ -65,10 +65,10 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     {
         $commands = [];
 
-        foreach (File::allFiles(app_path()) as $file) {
-            $class = 'App\\'.str_replace(['/', '.php'], ['\\', ''], $file->getRelativePathname());
+        foreach (File::allFiles(app_path()) as $splFileInfo) {
+            $class = 'App\\'.str_replace(['/', '.php'], ['\\', ''], $splFileInfo->getRelativePathname());
 
-            if (str_contains(str_replace('\\', '/', $file->getRelativePath()), 'UseCases/Commands')
+            if (str_contains(str_replace('\\', '/', $splFileInfo->getRelativePath()), 'UseCases/Commands')
                 && is_subclass_of($class, Data::class)) {
                 $commands[] = $class;
             }
@@ -89,9 +89,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         $items = [];
 
         foreach ($commands as $command) {
-            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $dataProperty) {
                 /** @var class-string<Data>|null $item */
-                $item = $property->type->dataClass;
+                $item = $dataProperty->type->dataClass;
 
                 if ($item !== null && ! in_array($item, $commands, true)) {
                     $items[] = $item;
@@ -115,8 +115,8 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         foreach ($commands as $command) {
             $rules = $this->rulesOf($command);
 
-            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
-                array_push($untyped, ...$this->breachesOf($command, $property, $rules));
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $dataProperty) {
+                array_push($untyped, ...$this->breachesOf($command, $dataProperty, $rules));
             }
         }
 
@@ -133,11 +133,11 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
             return [];
         }
 
-        $rules = new ReflectionMethod($command, 'rules');
+        $reflectionMethod = new ReflectionMethod($command, 'rules');
 
-        return $rules->getNumberOfParameters() === 0
-            ? $rules->invoke(null)
-            : $rules->invoke(null, new ValidationContext([], [], ValidationPath::create()));
+        return $reflectionMethod->getNumberOfParameters() === 0
+            ? $reflectionMethod->invoke(null)
+            : $reflectionMethod->invoke(null, new ValidationContext([], [], ValidationPath::create()));
     }
 
     /**
@@ -145,30 +145,30 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      * @param  array<string, mixed>  $rules
      * @return list<string>
      */
-    protected function breachesOf(string $command, DataProperty $property, array $rules): array
+    protected function breachesOf(string $command, DataProperty $dataProperty, array $rules): array
     {
-        $reflection = new ReflectionProperty($command, $property->name);
-        $type = $reflection->getType();
-        $typeName = $type instanceof ReflectionNamedType ? $type->getName() : '';
-        $inputName = $property->inputMappedName ?? $property->name;
+        $reflectionProperty = new ReflectionProperty($command, $dataProperty->name);
+        $reflectionType = $reflectionProperty->getType();
+        $typeName = $reflectionType instanceof ReflectionNamedType ? $reflectionType->getName() : '';
+        $inputName = $dataProperty->inputMappedName ?? $dataProperty->name;
         $parsed = $this->parsedRules($rules[$inputName] ?? []);
-        $markerReason = $this->markerReasonOf($reflection);
+        $markerReason = $this->markerReasonOf($reflectionProperty);
         $opaque = $markerReason !== null && $markerReason !== '';
 
         $checks = [
-            ...array_fill_keys($opaque ? [] : $this->stringChecksOf($property, $typeName, $parsed), true),
+            ...array_fill_keys($opaque ? [] : $this->stringChecksOf($dataProperty, $typeName, $parsed), true),
             'a marker without a reason' => $markerReason === '',
             'a flag that is not a cast bool' => $this->holdsAFlag($parsed)
-                && ! ($typeName === 'bool' && $type->allowsNull() && $property->cast instanceof BuiltinTypeCast),
+                && ! ($typeName === 'bool' && $reflectionType->allowsNull() && $dataProperty->cast instanceof BuiltinTypeCast),
             'a date that is not Carbon' => ($this->holdsADate($parsed) && ! $this->isCarbon($typeName))
-                || $this->holdsANestedDateNotCarbon($property, $rules),
-            'a mapper outside the id shape' => $property->inputMappedName !== null
-                && ! is_a($property->className, QueryCommand::class, true)
-                && ! (is_subclass_of($typeName, Model::class) && $property->inputMappedName === $property->name.'Id'),
-            'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $property, $typeName),
+                || $this->holdsANestedDateNotCarbon($dataProperty, $rules),
+            'a mapper outside the id shape' => $dataProperty->inputMappedName !== null
+                && ! is_a($dataProperty->className, QueryCommand::class, true)
+                && ! (is_subclass_of($typeName, Model::class) && $dataProperty->inputMappedName === $dataProperty->name.'Id'),
+            'a model without ModelCast' => $this->holdsAModelWithoutCast($command, $dataProperty, $typeName),
         ];
 
-        $where = $property->className.'::$'.$property->name;
+        $where = $dataProperty->className.'::$'.$dataProperty->name;
 
         return array_map(fn (string $check): string => "{$where} — {$check}", array_keys(array_filter($checks)));
     }
@@ -177,11 +177,11 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      * @param  list<array<mixed>>  $parsed
      * @return list<string>
      */
-    protected function stringChecksOf(DataProperty $property, string $typeName, array $parsed): array
+    protected function stringChecksOf(DataProperty $dataProperty, string $typeName, array $parsed): array
     {
         return array_keys(array_filter([
             'a string reference' => $typeName === 'string'
-                && (preg_match('/(Id|By)$/', $property->name) === 1 || $this->holdsRule('Exists', $parsed)),
+                && (preg_match('/(Id|By)$/', $dataProperty->name) === 1 || $this->holdsRule('Exists', $parsed)),
             'a closed set kept as a string' => $typeName === 'string' && $this->holdsAClosedSet($parsed),
         ]));
     }
@@ -197,13 +197,13 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         foreach ($commands as $command) {
             $rules = $this->rulesOf($command);
 
-            foreach (app(DataConfig::class)->getDataClass($command)->properties as $property) {
-                $reflection = new ReflectionProperty($command, $property->name);
-                $type = $reflection->getType();
+            foreach (app(DataConfig::class)->getDataClass($command)->properties as $dataProperty) {
+                $reflectionProperty = new ReflectionProperty($command, $dataProperty->name);
+                $reflectionType = $reflectionProperty->getType();
 
-                if ($this->markerReasonOf($reflection) !== null && $type instanceof ReflectionNamedType) {
-                    $parsed = $this->parsedRules($rules[$property->inputMappedName ?? $property->name] ?? []);
-                    array_push($fired, ...$this->stringChecksOf($property, $type->getName(), $parsed));
+                if ($this->markerReasonOf($reflectionProperty) !== null && $reflectionType instanceof ReflectionNamedType) {
+                    $parsed = $this->parsedRules($rules[$dataProperty->inputMappedName ?? $dataProperty->name] ?? []);
+                    array_push($fired, ...$this->stringChecksOf($dataProperty, $reflectionType->getName(), $parsed));
                 }
             }
         }
@@ -214,9 +214,9 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         return $fired;
     }
 
-    protected function markerReasonOf(ReflectionProperty $reflection): ?string
+    protected function markerReasonOf(ReflectionProperty $reflectionProperty): ?string
     {
-        $markers = $reflection->getAttributes(OpaqueString::class);
+        $markers = $reflectionProperty->getAttributes(OpaqueString::class);
 
         return $markers === [] ? null : trim($markers[0]->newInstance()->reason);
     }
@@ -224,11 +224,11 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
     /**
      * @param  class-string  $command
      */
-    protected function holdsAModelWithoutCast(string $command, DataProperty $property, string $typeName): bool
+    protected function holdsAModelWithoutCast(string $command, DataProperty $dataProperty, string $typeName): bool
     {
         return method_exists($command, 'rules')
             && is_subclass_of($typeName, Model::class)
-            && ! $property->cast instanceof ModelCast;
+            && ! $dataProperty->cast instanceof ModelCast;
     }
 
     /**
@@ -257,14 +257,14 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
      *
      * @param  array<string, mixed>  $rules
      */
-    protected function holdsANestedDateNotCarbon(DataProperty $property, array $rules): bool
+    protected function holdsANestedDateNotCarbon(DataProperty $dataProperty, array $rules): bool
     {
-        $inputName = $property->inputMappedName ?? $property->name;
+        $inputName = $dataProperty->inputMappedName ?? $dataProperty->name;
 
         foreach ($rules as $key => $entry) {
             if (str_starts_with($key, $inputName.'.')
                 && $this->holdsADate($this->parsedRules($entry))
-                && ! $this->isCarbon($this->itemTypeOf($property, $key))) {
+                && ! $this->isCarbon($this->itemTypeOf($dataProperty, $key))) {
                 return true;
             }
         }
@@ -272,19 +272,19 @@ class CommandPropertiesAreTypedTest extends FoundationTestCase
         return false;
     }
 
-    protected function itemTypeOf(DataProperty $property, string $key): string
+    protected function itemTypeOf(DataProperty $dataProperty, string $key): string
     {
         /** @var class-string<Data>|null $itemClass */
-        $itemClass = $property->type->dataClass;
+        $itemClass = $dataProperty->type->dataClass;
         $field = Str::afterLast($key, '.');
 
         if ($itemClass === null || ! property_exists($itemClass, $field)) {
             return '';
         }
 
-        $type = (new ReflectionProperty($itemClass, $field))->getType();
+        $reflectionType = (new ReflectionProperty($itemClass, $field))->getType();
 
-        return $type instanceof ReflectionNamedType ? $type->getName() : '';
+        return $reflectionType instanceof ReflectionNamedType ? $reflectionType->getName() : '';
     }
 
     protected function isCarbon(string $typeName): bool

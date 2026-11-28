@@ -36,13 +36,13 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
     {
         // Given reports are captured
         Exceptions::fake();
-        $exception = $failure();
+        $throwable = $failure();
 
         // When the exception is reported
-        report($exception);
+        report($throwable);
 
         // Then it reaches the error log
-        Exceptions::assertReported($exception::class);
+        Exceptions::assertReported($throwable::class);
     }
 
     /** @return array<string, array{Closure(): Throwable}> */
@@ -61,13 +61,13 @@ class KeepRecordedRefusalsOutOfTheErrorLogTest extends FoundationTestCase
     {
         // Given reports are captured
         Exceptions::fake();
-        $exception = $refusal();
+        $throwable = $refusal();
 
         // When the refusal is reported
-        report($exception);
+        report($throwable);
 
         // Then it never reaches the error log
-        Exceptions::assertNotReported($exception::class);
+        Exceptions::assertNotReported($throwable::class);
     }
 
     /** @return array<string, array{Closure(): Throwable}> */

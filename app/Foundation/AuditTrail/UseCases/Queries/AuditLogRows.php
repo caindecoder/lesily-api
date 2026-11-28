@@ -31,20 +31,20 @@ class AuditLogRows
      *
      * @return LazyCollection<int, stdClass>
      */
-    public function newestFirst(ExportAuditLogsCommand $command, CarbonImmutable $before): LazyCollection
+    public function newestFirst(ExportAuditLogsCommand $exportAuditLogsCommand, CarbonImmutable $exportStartedAt): LazyCollection
     {
-        return LazyCollection::make(function () use ($command, $before) {
-            $last = null;
+        return LazyCollection::make(function () use ($exportAuditLogsCommand, $exportStartedAt) {
+            $lastStdClass = null;
 
             do {
-                $page = $this->merged($this->halves($command, $command->company, $before), $last)->limit($this->pageSize)->get();
+                $stdClasses = $this->merged($this->halves($exportAuditLogsCommand, $exportAuditLogsCommand->company, $exportStartedAt), $lastStdClass)->limit($this->pageSize)->get();
 
-                foreach ($page as $row) {
-                    yield $row;
+                foreach ($stdClasses as $stdClass) {
+                    yield $stdClass;
                 }
 
-                $last = $page->last();
-            } while ($page->count() === $this->pageSize);
+                $lastStdClass = $stdClasses->last();
+            } while ($stdClasses->count() === $this->pageSize);
         });
     }
 
@@ -61,19 +61,19 @@ class AuditLogRows
     /**
      * The first day the rows start on: the requested start, clamped to the plan's horizon.
      */
-    public function from(AuditLogsQueryCommand $command, Company $company): CarbonImmutable
+    public function from(AuditLogsQueryCommand $auditLogsQueryCommand, Company $company): CarbonImmutable
     {
-        $retentionFrom = $this->retentionFrom($company);
+        $retentionStartDate = $this->retentionFrom($company);
 
-        return $command->within === null ? $retentionFrom : $retentionFrom->max($command->within->getStartDate());
+        return $auditLogsQueryCommand->within === null ? $retentionStartDate : $retentionStartDate->max($auditLogsQueryCommand->within->getStartDate());
     }
 
     /**
-     * @param  CarbonImmutable|null  $before  a moment the rows must come before (an export's start)
+     * @param  CarbonImmutable|null  $exportStartedAt  a moment the rows must come before (an export's start)
      */
-    public function of(AuditLogsQueryCommand $command, Company $company, ?CarbonImmutable $before = null): Builder
+    public function of(AuditLogsQueryCommand $auditLogsQueryCommand, Company $company, ?CarbonImmutable $exportStartedAt = null): Builder
     {
-        return $this->merged($this->halves($command, $company, $before), null);
+        return $this->merged($this->halves($auditLogsQueryCommand, $company, $exportStartedAt), null);
     }
 
     /**
@@ -81,15 +81,15 @@ class AuditLogRows
      *
      * @return array{Builder, Builder}
      */
-    protected function halves(AuditLogsQueryCommand $command, Company $company, ?CarbonImmutable $before): array
+    protected function halves(AuditLogsQueryCommand $auditLogsQueryCommand, Company $company, ?CarbonImmutable $exportStartedAt): array
     {
-        $from = $this->from($command, $company);
-        $until = $command->within?->getIncludedEndDate()->toImmutable()->addDay();
-        $until = $before === null ? $until : ($until?->min($before) ?? $before);
+        $windowStartsAt = $this->from($auditLogsQueryCommand, $company);
+        $windowEndsAt = $auditLogsQueryCommand->within?->getIncludedEndDate()->toImmutable()->addDay();
+        $windowEndsAt = $exportStartedAt === null ? $windowEndsAt : ($windowEndsAt?->min($exportStartedAt) ?? $exportStartedAt);
 
         return [
-            $this->searchedAccessRows($this->accessRows($company, $from, $until), $command),
-            $this->searchedSecurityRows($this->securityRows($company, $from, $until), $command),
+            $this->searchedAccessRows($this->accessRows($company, $windowStartsAt, $windowEndsAt), $auditLogsQueryCommand),
+            $this->searchedSecurityRows($this->securityRows($company, $windowStartsAt, $windowEndsAt), $auditLogsQueryCommand),
         ];
     }
 
@@ -98,66 +98,66 @@ class AuditLogRows
      *
      * @param  array{Builder, Builder}  $halves
      */
-    protected function merged(array $halves, ?stdClass $after): Builder
+    protected function merged(array $halves, ?stdClass $stdClass): Builder
     {
-        [$access, $security] = $halves;
+        [$accessBuilder, $securityBuilder] = $halves;
 
-        if ($after !== null) {
-            $access = $this->olderThan($access, $after, 'access_log.last_seen_at');
-            $security = $this->olderThan($security, $after, 'audit_trail.recorded_at');
+        if ($stdClass !== null) {
+            $accessBuilder = $this->olderThan($accessBuilder, $stdClass, 'access_log.last_seen_at');
+            $securityBuilder = $this->olderThan($securityBuilder, $stdClass, 'audit_trail.recorded_at');
         }
 
-        return $access->unionAll($security)->orderByDesc('time')->orderByDesc('id');
+        return $accessBuilder->unionAll($securityBuilder)->orderByDesc('time')->orderByDesc('id');
     }
 
     /**
-     * The rows that come after $row in the newest-first order: older, or as old with a lower id.
+     * The rows that come after $stdClass in the newest-first order: older, or as old with a lower id.
      */
-    protected function olderThan(Builder $rows, stdClass $row, string $timeColumn): Builder
+    protected function olderThan(Builder $builder, stdClass $stdClass, string $timeColumn): Builder
     {
         $idColumn = Str::before($timeColumn, '.').'.id';
 
-        return $rows->where(fn (Builder $older) => $older
-            ->where($timeColumn, '<', $row->time)
-            ->orWhere(fn (Builder $sameTime) => $sameTime->where($timeColumn, $row->time)->where($idColumn, '<', $row->id)));
+        return $builder->where(fn (Builder $builder) => $builder
+            ->where($timeColumn, '<', $stdClass->time)
+            ->orWhere(fn (Builder $builder) => $builder->where($timeColumn, $stdClass->time)->where($idColumn, '<', $stdClass->id)));
     }
 
-    protected function searchedAccessRows(Builder $rows, AuditLogsQueryCommand $command): Builder
+    protected function searchedAccessRows(Builder $builder, AuditLogsQueryCommand $auditLogsQueryCommand): Builder
     {
-        return $rows
-            ->when($command->user, fn (Builder $query, string $user) => $query->where('access_log.user_id', $user))
-            ->when($command->event, fn (Builder $query, string $event) => $query->where('access_log.event', $event))
-            ->when($command->ip, fn (Builder $query, string $ip) => $query->where('access_log.ip_address', $ip));
+        return $builder
+            ->when($auditLogsQueryCommand->user, fn (Builder $builder, string $user) => $builder->where('access_log.user_id', $user))
+            ->when($auditLogsQueryCommand->event, fn (Builder $builder, string $event) => $builder->where('access_log.event', $event))
+            ->when($auditLogsQueryCommand->ip, fn (Builder $builder, string $ip) => $builder->where('access_log.ip_address', $ip));
     }
 
-    protected function searchedSecurityRows(Builder $rows, AuditLogsQueryCommand $command): Builder
+    protected function searchedSecurityRows(Builder $builder, AuditLogsQueryCommand $auditLogsQueryCommand): Builder
     {
-        return $rows
-            ->when($command->user, fn (Builder $query, string $user) => $this->byUser($query, $user))
-            ->when($command->event, fn (Builder $query, string $event) => $query->where('action', $event))
-            ->when($command->ip, fn (Builder $query, string $ip) => $this->exceptStaff($query->where('ip_address', $ip)));
+        return $builder
+            ->when($auditLogsQueryCommand->user, fn (Builder $builder, string $user) => $this->byUser($builder, $user))
+            ->when($auditLogsQueryCommand->event, fn (Builder $builder, string $event) => $builder->where('action', $event))
+            ->when($auditLogsQueryCommand->ip, fn (Builder $builder, string $ip) => $this->exceptStaff($builder->where('ip_address', $ip)));
     }
 
-    protected function byUser(Builder $rows, string $user): Builder
+    protected function byUser(Builder $builder, string $user): Builder
     {
         if ($user === MemberOrLesilySupport::LESILY_SUPPORT) {
-            return $rows->where('actor_role_code', AuditEntry::STAFF_ROLE_CODE);
+            return $builder->where('actor_role_code', AuditEntry::STAFF_ROLE_CODE);
         }
 
-        return $this->exceptStaff($rows->where('actor_user_id', $user));
+        return $this->exceptStaff($builder->where('actor_user_id', $user));
     }
 
     /**
      * A staff row's actor and address are never shown, so no search may match them.
      */
-    protected function exceptStaff(Builder $rows): Builder
+    protected function exceptStaff(Builder $builder): Builder
     {
-        return $rows->where(fn (Builder $member) => $member
+        return $builder->where(fn (Builder $builder) => $builder
             ->whereNull('actor_role_code')
             ->orWhere('actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
     }
 
-    protected function accessRows(Company $company, CarbonImmutable $from, ?CarbonImmutable $until): Builder
+    protected function accessRows(Company $company, CarbonImmutable $windowStartsAt, ?CarbonImmutable $windowEndsAt): Builder
     {
         return DB::table('access_log')
             ->leftJoin('users', 'users.id', '=', 'access_log.user_id')
@@ -176,11 +176,11 @@ class AuditLogRows
                 'access_log.user_agent as device',
             ])
             ->where('access_log.company_id', $company->getKey())
-            ->where('access_log.last_seen_at', '>=', $from)
-            ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('access_log.last_seen_at', '<', $until));
+            ->where('access_log.last_seen_at', '>=', $windowStartsAt)
+            ->when($windowEndsAt, fn (Builder $builder, CarbonImmutable $windowEndsAt) => $builder->where('access_log.last_seen_at', '<', $windowEndsAt));
     }
 
-    protected function securityRows(Company $company, CarbonImmutable $from, ?CarbonImmutable $until): Builder
+    protected function securityRows(Company $company, CarbonImmutable $windowStartsAt, ?CarbonImmutable $windowEndsAt): Builder
     {
         return DB::table('audit_trail')
             ->select([
@@ -199,7 +199,7 @@ class AuditLogRows
             ])
             ->where('company_id', $company->getKey())
             ->whereIn('action', AuditAction::SECURITY_ACTIONS)
-            ->where('recorded_at', '>=', $from)
-            ->when($until, fn (Builder $query, CarbonImmutable $until) => $query->where('recorded_at', '<', $until));
+            ->where('recorded_at', '>=', $windowStartsAt)
+            ->when($windowEndsAt, fn (Builder $builder, CarbonImmutable $windowEndsAt) => $builder->where('recorded_at', '<', $windowEndsAt));
     }
 }

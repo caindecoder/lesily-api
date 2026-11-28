@@ -21,20 +21,20 @@ class EnsureFeatureAvailable
 {
     public function handle(Request $request, Closure $next, string $feature): Response
     {
-        $required = Feature::from($feature);
+        $requiredFeature = Feature::from($feature);
         $company = $request->company();
 
-        if ($company->canUseFeature($required)) {
+        if ($company->canUseFeature($requiredFeature)) {
             return $next($request);
         }
 
-        if (BillingPlan::lowestPlanWith($required) === null) {
+        if (BillingPlan::lowestPlanWith($requiredFeature) === null) {
             Log::warning('Feature gate failed closed: feature offered by no plan or add-on.', [
-                'feature' => $required->value,
+                'feature' => $requiredFeature->value,
                 'company_id' => $company->getKey(),
             ]);
         }
 
-        throw FeatureUnavailableException::forFeature($required);
+        throw FeatureUnavailableException::forFeature($requiredFeature);
     }
 }

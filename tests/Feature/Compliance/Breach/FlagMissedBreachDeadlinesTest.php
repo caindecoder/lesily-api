@@ -432,7 +432,7 @@ class FlagMissedBreachDeadlinesTest extends BreachIncidentsTestCase
         $this->assertCount(2, $platformAdmins);
         foreach ($platformAdmins as $platformAdmin) {
             Notification::assertSentToTimes($platformAdmin, SystemNotification::class, 1);
-            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachDeadlineMissed
+            Notification::assertSentTo($platformAdmin, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachDeadlineMissed
                 && $systemNotification->companyName === $companies
                 && $systemNotification->companyId === null
                 && $systemNotification->details === ['incident' => $breachId, 'deadline' => '7 May 2026, 14:00 UTC']);

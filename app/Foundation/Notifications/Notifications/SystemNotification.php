@@ -30,21 +30,21 @@ class SystemNotification extends Notification
      * @param  array<string, string>  $details  values the type's body names beside the company
      */
     public function __construct(
-        public NotificationType $type,
+        public NotificationType $notificationType,
         public string $companyName,
         public ?string $companyId,
         public array $details = [],
     ) {}
 
     /**
-     * @param  User  $notifiable
+     * @param  User  $recipient
      * @return array<int, string>
      */
-    public function via(object $notifiable): array
+    public function via(object $recipient): array
     {
         $channels = [CompanyDatabaseChannel::class];
 
-        if ($this->type->isCritical() || ! $this->mailOptedOut($notifiable)) {
+        if ($this->notificationType->isCritical() || ! $this->mailOptedOut($recipient)) {
             $channels[] = QueuedMailChannel::class;
         }
 
@@ -52,34 +52,34 @@ class SystemNotification extends Notification
     }
 
     /**
-     * @param  User  $notifiable
+     * @param  User  $recipient
      */
-    public function toMail(object $notifiable): SystemNotificationMail
+    public function toMail(object $recipient): SystemNotificationMail
     {
-        return (new SystemNotificationMail($this->type, $this->companyName, $this->details))
-            ->locale($notifiable->preferredLocale());
+        return (new SystemNotificationMail($this->notificationType, $this->companyName, $this->details))
+            ->locale($recipient->preferredLocale());
     }
 
     /**
      * @return array<string, string|array<string, string>>
      */
-    public function toArray(object $notifiable): array
+    public function toArray(object $recipient): array
     {
         return [
-            'notification_type' => $this->type->value,
+            'notification_type' => $this->notificationType->value,
             'company_name' => $this->companyName,
             'details' => $this->details,
         ];
     }
 
     /**
-     * @param  User  $notifiable
+     * @param  User  $recipient
      */
-    protected function mailOptedOut(object $notifiable): bool
+    protected function mailOptedOut(object $recipient): bool
     {
         return NotificationPreference::query()
-            ->where('user_id', $notifiable->getKey())
-            ->where('notification_type', $this->type->value)
+            ->where('user_id', $recipient->getKey())
+            ->where('notification_type', $this->notificationType->value)
             ->where('channel', self::MAIL_CHANNEL)
             ->where('enabled', false)
             ->exists();

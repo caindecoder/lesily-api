@@ -24,10 +24,10 @@ class ModelCastAdaptsIdsToModelsTest extends FoundationTestCase
     public function when_the_cast_names_a_class_that_is_not_a_model_then_it_declines(): void
     {
         // Given a cast naming a class that is not a model
-        $cast = new ModelCast(CarbonImmutable::class);
+        $modelCast = new ModelCast(CarbonImmutable::class);
 
         // When it casts an id read for the receipt command's invoice
-        $outcome = $this->castForTheReceiptInvoice($cast, (string) Str::uuid());
+        $outcome = $this->castForTheReceiptInvoice($modelCast, (string) Str::uuid());
 
         // Then it declines and leaves the value to the next cast
         $this->assertSame(Uncastable::create(), $outcome);
@@ -38,10 +38,10 @@ class ModelCastAdaptsIdsToModelsTest extends FoundationTestCase
     {
         // Given a stored invoice and a cast naming only its key column
         $invoiceId = Invoice::factory()->create()->getKey();
-        $cast = new ModelCast(Invoice::class, ['id']);
+        $modelCast = new ModelCast(Invoice::class, ['id']);
 
         // When the cast loads the invoice by its id
-        $outcome = $this->castForTheReceiptInvoice($cast, $invoiceId);
+        $outcome = $this->castForTheReceiptInvoice($modelCast, $invoiceId);
 
         // Then the loaded invoice holds the key column alone
         $this->assertInstanceOf(Invoice::class, $outcome);
@@ -61,12 +61,12 @@ class ModelCastAdaptsIdsToModelsTest extends FoundationTestCase
         $this->assertSame($invoice, $outcome);
     }
 
-    protected function castForTheReceiptInvoice(ModelCast $cast, mixed $value): mixed
+    protected function castForTheReceiptInvoice(ModelCast $modelCast, mixed $value): mixed
     {
-        $property = app(DataConfig::class)->getDataClass(DownloadInvoiceReceiptCommand::class)->properties
-            ->firstOrFail(fn (DataProperty $property): bool => $property->name === 'invoice');
-        $context = CreationContextFactory::createFromConfig(DownloadInvoiceReceiptCommand::class)->get();
+        $dataProperty = app(DataConfig::class)->getDataClass(DownloadInvoiceReceiptCommand::class)->properties
+            ->firstOrFail(fn (DataProperty $dataProperty): bool => $dataProperty->name === 'invoice');
+        $creationContext = CreationContextFactory::createFromConfig(DownloadInvoiceReceiptCommand::class)->get();
 
-        return $cast->cast($property, $value, [], $context);
+        return $modelCast->cast($dataProperty, $value, [], $creationContext);
     }
 }

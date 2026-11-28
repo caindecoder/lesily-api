@@ -450,7 +450,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertNotEmpty($recipients);
         foreach ($recipients as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachCompanyNotice
                 && $systemNotification->companyName === $company->name
                 && $systemNotification->companyId === $company->getKey()
                 && $systemNotification->details === $part);
@@ -465,7 +465,7 @@ class NotifyBreachCompaniesTest extends BreachIncidentsTestCase
         $this->assertNotEmpty($recipients);
         foreach ($recipients as $recipient) {
             Notification::assertSentToTimes($recipient, SystemNotification::class, 1);
-            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->type === NotificationType::BreachCompanyNotice
+            Notification::assertSentTo($recipient, SystemNotification::class, fn (SystemNotification $systemNotification): bool => $systemNotification->notificationType === NotificationType::BreachCompanyNotice
                 && $systemNotification->companyName === $company->name
                 && $systemNotification->companyId === $company->getKey());
         }

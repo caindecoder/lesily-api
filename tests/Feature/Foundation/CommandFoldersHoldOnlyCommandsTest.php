@@ -59,8 +59,8 @@ class CommandFoldersHoldOnlyCommandsTest extends FoundationTestCase
     {
         $files = [];
 
-        foreach (File::allFiles(app_path()) as $file) {
-            $path = str_replace('\\', '/', $file->getRelativePathname());
+        foreach (File::allFiles(app_path()) as $splFileInfo) {
+            $path = str_replace('\\', '/', $splFileInfo->getRelativePathname());
 
             if (str_contains($path, 'UseCases/Commands/')) {
                 $files[$path] = 'App\\'.str_replace(['/', '.php'], ['\\', ''], $path);

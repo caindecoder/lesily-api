@@ -21,41 +21,41 @@ use App\Foundation\AuditTrail\UseCases\Interactors\ExportAuditLogsInteractor;
 
 class AuditLogController extends Controller
 {
-    public function index(Request $request, ListAuditLogsInteractor $interactor): JsonResponse
+    public function index(Request $request, ListAuditLogsInteractor $listAuditLogsInteractor): JsonResponse
     {
-        $page = $interactor->execute(ListAuditLogsCommand::fromQuery($request), $request->company());
+        $auditLogPage = $listAuditLogsInteractor->execute(ListAuditLogsCommand::fromQuery($request), $request->company());
 
-        return (new AuditLogRowCollection($page->rows))
-            ->additional(['meta' => ['retention' => ['from' => $page->retentionFrom->toDateString()]]])
+        return (new AuditLogRowCollection($auditLogPage->stdClasses))
+            ->additional(['meta' => ['retention' => ['from' => $auditLogPage->retentionStartDate->toDateString()]]])
             ->response($request);
     }
 
-    public function export(Request $request, ExportAuditLogsInteractor $interactor): StreamedResponse
+    public function export(Request $request, ExportAuditLogsInteractor $exportAuditLogsInteractor): StreamedResponse
     {
-        $command = ExportAuditLogsCommand::fromQuery($request);
+        $exportAuditLogsCommand = ExportAuditLogsCommand::fromQuery($request);
         /** @var User $actor — guaranteed by auth:sanctum */
         $actor = $request->user();
 
-        $rows = $interactor->execute($command, $actor, RequestOrigin::fromRequest($request));
+        $stdClasses = $exportAuditLogsInteractor->execute($exportAuditLogsCommand, $actor, RequestOrigin::fromRequest($request));
 
         return response()->streamDownload(
-            fn () => $command->format === ExportFormat::Json ? $this->writeJson($rows, $request) : $this->writeCsv($rows, $request),
-            'audit-logs-'.today()->toDateString().'.'.$command->format->value,
-            ['Content-Type' => $command->format->contentType()],
+            fn () => $exportAuditLogsCommand->format === ExportFormat::Json ? $this->writeJson($stdClasses, $request) : $this->writeCsv($stdClasses, $request),
+            'audit-logs-'.today()->toDateString().'.'.$exportAuditLogsCommand->format->value,
+            ['Content-Type' => $exportAuditLogsCommand->format->contentType()],
         );
     }
 
     /**
-     * @param  LazyCollection<int, stdClass>  $rows
+     * @param  LazyCollection<int, stdClass>  $stdClasses
      */
-    protected function writeJson(LazyCollection $rows, Request $request): void
+    protected function writeJson(LazyCollection $stdClasses, Request $request): void
     {
         $separator = '';
 
         echo '[';
 
-        foreach ($rows as $row) {
-            echo $separator.json_encode((new AuditLogRowResource($row))->toArray($request), JSON_THROW_ON_ERROR);
+        foreach ($stdClasses as $stdClass) {
+            echo $separator.json_encode((new AuditLogRowResource($stdClass))->toArray($request), JSON_THROW_ON_ERROR);
             $separator = ',';
         }
 
@@ -63,15 +63,15 @@ class AuditLogController extends Controller
     }
 
     /**
-     * @param  LazyCollection<int, stdClass>  $rows
+     * @param  LazyCollection<int, stdClass>  $stdClasses
      */
-    protected function writeCsv(LazyCollection $rows, Request $request): void
+    protected function writeCsv(LazyCollection $stdClasses, Request $request): void
     {
-        $output = new SplFileObject('php://output', 'w');
-        $output->fputcsv(AuditLogRowResource::FIELDS, escape: '');
+        $splFileObject = new SplFileObject('php://output', 'w');
+        $splFileObject->fputcsv(AuditLogRowResource::FIELDS, escape: '');
 
-        foreach ($rows as $row) {
-            $output->fputcsv(array_map($this->asText(...), (new AuditLogRowResource($row))->toArray($request)), escape: '');
+        foreach ($stdClasses as $stdClass) {
+            $splFileObject->fputcsv(array_map($this->asText(...), (new AuditLogRowResource($stdClass))->toArray($request)), escape: '');
         }
     }
 

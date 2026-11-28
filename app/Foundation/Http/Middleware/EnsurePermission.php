@@ -17,7 +17,7 @@ use App\Foundation\RolesPermissions\Services\PermissionEvaluator;
  */
 class EnsurePermission
 {
-    public function __construct(private readonly PermissionEvaluator $evaluator) {}
+    public function __construct(private readonly PermissionEvaluator $permissionEvaluator) {}
 
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -25,7 +25,7 @@ class EnsurePermission
         $user = $request->user();
         $company = $request->company();
 
-        if (! $this->evaluator->canUserDo($user, $company, $permission)) {
+        if (! $this->permissionEvaluator->canUserDo($user, $company, $permission)) {
             throw new RoleInsufficientException($permission);
         }
 

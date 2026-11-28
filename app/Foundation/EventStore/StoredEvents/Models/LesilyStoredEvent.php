@@ -13,16 +13,16 @@ class LesilyStoredEvent extends BaseEloquentStoredEvent
 {
     protected static function booted(): void
     {
-        static::saving(function (LesilyStoredEvent $storedEvent): void {
-            $storedEvent->company_id = data_get($storedEvent->meta_data, 'company_id');
+        static::saving(function (LesilyStoredEvent $lesilyStoredEvent): void {
+            $lesilyStoredEvent->company_id = data_get($lesilyStoredEvent->meta_data, 'company_id');
         });
     }
 
     /**
-     * @param  Builder<LesilyStoredEvent>  $query
+     * @param  Builder<LesilyStoredEvent>  $lesilyStoredEvents
      */
-    public function scopeWhereForCompany(Builder $query, string $companyId): void
+    public function scopeWhereForCompany(Builder $lesilyStoredEvents, string $companyId): void
     {
-        $query->where('company_id', $companyId);
+        $lesilyStoredEvents->where('company_id', $companyId);
     }
 }

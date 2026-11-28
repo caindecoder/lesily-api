@@ -59,13 +59,13 @@ class ScheduleExpiryScansTest extends FoundationTestCase
     public function when_a_command_is_scheduled_then_it_is_a_declared_daily_scan(): void
     {
         // Given the application's registered schedule
-        $scheduled = $this->scheduledCommandStrings();
+        $scheduledCollection = $this->scheduledCommandStrings();
 
         // When each scheduled task is checked against the declared list
         // Then the schedule is populated and none of it runs undeclared
-        $this->assertNotEmpty($scheduled, 'The schedule is empty — no daily scan is registered at all.');
+        $this->assertNotEmpty($scheduledCollection, 'The schedule is empty — no daily scan is registered at all.');
 
-        foreach ($scheduled as $command) {
+        foreach ($scheduledCollection as $command) {
             $this->assertTrue(
                 collect(self::DECLARED_DAILY_SCANS)->contains(
                     fn (string $scan): bool => $this->runsScan($command, $scan),

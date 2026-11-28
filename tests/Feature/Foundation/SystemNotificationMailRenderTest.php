@@ -18,108 +18,108 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
     public function when_built_then_it_renders_from_the_markdown_template(): void
     {
         // Given
-        $mail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $this->assertRendersFromMarkdownTemplate($mail);
+        $this->assertRendersFromMarkdownTemplate($systemNotificationMail);
     }
 
     #[Test]
     public function when_rendered_then_the_body_reflects_the_notification_type(): void
     {
         // Given
-        $security = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
-        $notice = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
+        $securitySystemNotificationMail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+        $noticeSystemNotificationMail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $security->assertSeeInHtml("There was security activity on your Lesily account in Contoso. If it wasn't you, change your password now.", escape: false);
-        $security->assertDontSeeInHtml('You have a new notice about your account in Contoso.');
-        $notice->assertSeeInHtml('You have a new notice about your account in Contoso. Sign in to Lesily to read it.');
+        $securitySystemNotificationMail->assertSeeInHtml("There was security activity on your Lesily account in Contoso. If it wasn't you, change your password now.", escape: false);
+        $securitySystemNotificationMail->assertDontSeeInHtml('You have a new notice about your account in Contoso.');
+        $noticeSystemNotificationMail->assertSeeInHtml('You have a new notice about your account in Contoso. Sign in to Lesily to read it.');
     }
 
     #[Test]
     public function when_a_critical_notification_mail_is_rendered_then_its_subject_is_the_company_scoped_security_line(): void
     {
         // Given
-        $mail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::AccountSecurityAlert, 'Contoso');
 
         // When / Then
-        $mail->assertHasSubject('Security alert for Contoso');
+        $systemNotificationMail->assertHasSubject('Security alert for Contoso');
     }
 
     #[Test]
     public function when_a_general_notification_mail_is_rendered_then_its_subject_is_the_company_scoped_notice_line(): void
     {
         // Given
-        $mail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::GeneralAccountNotice, 'Contoso');
 
         // When / Then
-        $mail->assertHasSubject('A notification from Contoso');
+        $systemNotificationMail->assertHasSubject('A notification from Contoso');
     }
 
     #[Test]
     public function when_a_password_changed_mail_is_rendered_then_its_subject_is_the_confirmation_line(): void
     {
         // Given
-        $mail = new SystemNotificationMail(NotificationType::PasswordChanged, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::PasswordChanged, 'Contoso');
 
         // When / Then — the UC-1-016 postcondition subject (company-agnostic — no :company placeholder)
-        $mail->assertHasSubject('Your password was changed');
+        $systemNotificationMail->assertHasSubject('Your password was changed');
     }
 
     #[Test]
     public function when_an_ownership_received_mail_is_rendered_then_its_subject_names_the_company_handed_over(): void
     {
         // Given
-        $mail = new SystemNotificationMail(NotificationType::OwnershipReceived, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::OwnershipReceived, 'Contoso');
 
         // When / Then — a missing lang entry would ship the literal translation
         // key as the subject (UC-1-028 new-owner notice)
-        $mail->assertHasSubject('You are now the owner of Contoso');
+        $systemNotificationMail->assertHasSubject('You are now the owner of Contoso');
     }
 
     #[Test]
     #[DataProvider('provideNotificationTypes')]
-    public function when_any_notice_is_rendered_then_it_has_a_written_subject_and_body(NotificationType $type): void
+    public function when_any_notice_is_rendered_then_it_has_a_written_subject_and_body(NotificationType $notificationType): void
     {
         // Given a notice of the type
-        $mail = new SystemNotificationMail($type, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail($notificationType, 'Contoso');
 
         // When / Then — the type has a written subject and body, and no lang key shows through
-        $this->assertWrittenCopyFor($mail, $type);
+        $this->assertWrittenCopyFor($systemNotificationMail, $notificationType);
     }
 
     #[Test]
     #[DataProvider('provideDsarNoticeCopy')]
-    public function when_a_data_export_notice_is_rendered_then_it_reads_its_own_subject_and_body(NotificationType $type, string $subject, string $body): void
+    public function when_a_data_export_notice_is_rendered_then_it_reads_its_own_subject_and_body(NotificationType $notificationType, string $subject, string $body): void
     {
         // Given a data-export notice for Contoso
-        $mail = new SystemNotificationMail($type, 'Contoso');
+        $systemNotificationMail = new SystemNotificationMail($notificationType, 'Contoso');
 
         // When / Then — its subject and body are this outcome's own words
-        $mail->assertHasSubject($subject);
-        $mail->assertSeeInHtml($body);
+        $systemNotificationMail->assertHasSubject($subject);
+        $systemNotificationMail->assertSeeInHtml($body);
     }
 
     #[Test]
     public function when_a_notice_carries_details_then_its_mail_reads_them(): void
     {
         // Given a missed-deadline notice for Contoso naming the request and its deadline
-        $mail = new SystemNotificationMail(NotificationType::DsarDeadlineMissed, 'Contoso', [
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::DsarDeadlineMissed, 'Contoso', [
             'request' => '0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f',
             'deadline' => '31 Oct 2026, 09:00 UTC',
         ]);
 
         // When / Then — its subject and body read the request and its deadline
-        $mail->assertHasSubject('A personal data request in Contoso missed its 30-day deadline');
-        $mail->assertSeeInHtml('The personal data request 0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f in Contoso was due on 31 Oct 2026, 09:00 UTC and is not yet complete. Please follow it up with the company.');
+        $systemNotificationMail->assertHasSubject('A personal data request in Contoso missed its 30-day deadline');
+        $systemNotificationMail->assertSeeInHtml('The personal data request 0199e3a4-7b2c-7d10-9f3e-5a6b7c8d9e0f in Contoso was due on 31 Oct 2026, 09:00 UTC and is not yet complete. Please follow it up with the company.');
     }
 
     #[Test]
     public function when_a_breach_notice_carries_a_company_part_then_its_mail_reads_every_fact(): void
     {
         // Given a breach notice for Contoso carrying its own part of the incident
-        $mail = new SystemNotificationMail(NotificationType::BreachCompanyNotice, 'Contoso', [
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::BreachCompanyNotice, 'Contoso', [
             'discovered' => '4 May 2026, 14:00 UTC',
             'deadline' => '7 May 2026, 14:00 UTC',
             'description' => 'A payroll export was emailed to the wrong recipient.',
@@ -130,49 +130,49 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
         ]);
 
         // When / Then — its subject names the company and its body reads every fact of the part
-        $mail->assertHasSubject('A personal data breach affects Contoso');
-        $mail->assertSeeInHtml('Lesily found a breach of personal data that Contoso keeps in Lesily. It was discovered on 4 May 2026, 14:00 UTC. As the data controller, Contoso should notify the Data Protection Authority by 7 May 2026, 14:00 UTC. What happened: A payroll export was emailed to the wrong recipient. Likely consequences: Salary and bank details may be read by one outside person. Measures taken or planned: The recipient was asked to delete the file. Personal data affected: Payroll records, Bank details. People affected: 30.');
+        $systemNotificationMail->assertHasSubject('A personal data breach affects Contoso');
+        $systemNotificationMail->assertSeeInHtml('Lesily found a breach of personal data that Contoso keeps in Lesily. It was discovered on 4 May 2026, 14:00 UTC. As the data controller, Contoso should notify the Data Protection Authority by 7 May 2026, 14:00 UTC. What happened: A payroll export was emailed to the wrong recipient. Likely consequences: Salary and bank details may be read by one outside person. Measures taken or planned: The recipient was asked to delete the file. Personal data affected: Payroll records, Bank details. People affected: 30.');
     }
 
     #[Test]
     public function when_a_breach_filing_request_alert_is_rendered_then_its_mail_names_the_company_and_the_incident(): void
     {
         // Given the platform admins' alert that Contoso asked Lesily to file an incident
-        $mail = new SystemNotificationMail(NotificationType::BreachFilingRequested, 'Contoso', [
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::BreachFilingRequested, 'Contoso', [
             'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000aa',
         ]);
 
         // When / Then — its subject names the company and its body names the incident to file
-        $mail->assertHasSubject('Contoso asked Lesily to file a personal data breach');
-        $mail->assertSeeInHtml('Contoso asked Lesily to file the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000aa with the Data Protection Authority for it. Please file it for them.');
+        $systemNotificationMail->assertHasSubject('Contoso asked Lesily to file a personal data breach');
+        $systemNotificationMail->assertSeeInHtml('Contoso asked Lesily to file the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000aa with the Data Protection Authority for it. Please file it for them.');
     }
 
     #[Test]
     public function when_a_breach_filed_notice_is_rendered_then_its_mail_says_lesily_filed_for_the_company(): void
     {
         // Given Contoso's owner and admins are told Lesily filed its part of an incident
-        $mail = new SystemNotificationMail(NotificationType::BreachFiledWithRegulator, 'Contoso', [
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::BreachFiledWithRegulator, 'Contoso', [
             'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000bb',
             'filed_at' => '6 May 2026, 11:15 UTC',
         ]);
 
         // When / Then — its subject names the company and its body names the incident and the filing time
-        $mail->assertHasSubject('Lesily filed a personal data breach with the regulator for Contoso');
-        $mail->assertSeeInHtml('As Contoso asked, Lesily filed its part of the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000bb with the Data Protection Authority on 6 May 2026, 11:15 UTC.');
+        $systemNotificationMail->assertHasSubject('Lesily filed a personal data breach with the regulator for Contoso');
+        $systemNotificationMail->assertSeeInHtml('As Contoso asked, Lesily filed its part of the personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000bb with the Data Protection Authority on 6 May 2026, 11:15 UTC.');
     }
 
     #[Test]
     public function when_a_breach_deadline_missed_alert_is_rendered_then_its_mail_names_the_companies_the_incident_and_the_deadline(): void
     {
         // Given the platform admins' alert that an incident affecting Contoso and Fabrikam missed its deadline
-        $mail = new SystemNotificationMail(NotificationType::BreachDeadlineMissed, 'Contoso, Fabrikam', [
+        $systemNotificationMail = new SystemNotificationMail(NotificationType::BreachDeadlineMissed, 'Contoso, Fabrikam', [
             'incident' => '019a5b2e-7c1d-7f00-8a00-0000000000cc',
             'deadline' => '7 May 2026, 14:00 UTC',
         ]);
 
         // When / Then — its subject names the companies and its body names the incident and the missed deadline
-        $mail->assertHasSubject('A personal data breach affecting Contoso, Fabrikam missed its 72-hour deadline');
-        $mail->assertSeeInHtml('The personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000cc affecting Contoso, Fabrikam was due to be reported by 7 May 2026, 14:00 UTC, and its companies have not been notified. Please send their notices now.');
+        $systemNotificationMail->assertHasSubject('A personal data breach affecting Contoso, Fabrikam missed its 72-hour deadline');
+        $systemNotificationMail->assertSeeInHtml('The personal data breach 019a5b2e-7c1d-7f00-8a00-0000000000cc affecting Contoso, Fabrikam was due to be reported by 7 May 2026, 14:00 UTC, and its companies have not been notified. Please send their notices now.');
     }
 
     /**
@@ -205,15 +205,15 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
     public static function provideNotificationTypes(): array
     {
         return collect(NotificationType::cases())
-            ->mapWithKeys(fn (NotificationType $type): array => [$type->value => [$type]])
+            ->mapWithKeys(fn (NotificationType $notificationType): array => [$notificationType->value => [$notificationType]])
             ->all();
     }
 
-    protected function assertWrittenCopyFor(SystemNotificationMail $mail, NotificationType $type): void
+    protected function assertWrittenCopyFor(SystemNotificationMail $systemNotificationMail, NotificationType $notificationType): void
     {
-        $this->assertTrue(Lang::has("notifications.{$type->value}.subject", 'en', false));
-        $this->assertTrue(Lang::has("notifications.{$type->value}.body", 'en', false));
-        $mail->assertDontSeeInHtml('notifications.');
+        $this->assertTrue(Lang::has("notifications.{$notificationType->value}.subject", 'en', false));
+        $this->assertTrue(Lang::has("notifications.{$notificationType->value}.body", 'en', false));
+        $systemNotificationMail->assertDontSeeInHtml('notifications.');
     }
 
     /**
@@ -222,10 +222,10 @@ class SystemNotificationMailRenderTest extends FoundationTestCase
      * the markdown template (not a plain view) guards the OQ-1-113 fix independent
      * of process state, then proves the template actually compiles.
      */
-    protected function assertRendersFromMarkdownTemplate(SystemNotificationMail $mail): void
+    protected function assertRendersFromMarkdownTemplate(SystemNotificationMail $systemNotificationMail): void
     {
-        $this->assertSame('emails.system-notification', $mail->content()->markdown);
-        $this->assertNull($mail->content()->view);
-        $this->assertNotEmpty($mail->render());
+        $this->assertSame('emails.system-notification', $systemNotificationMail->content()->markdown);
+        $this->assertNull($systemNotificationMail->content()->view);
+        $this->assertNotEmpty($systemNotificationMail->render());
     }
 }

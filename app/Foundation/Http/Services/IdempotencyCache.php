@@ -31,7 +31,7 @@ class IdempotencyCache
 
     private const int RESULT_TTL_SECONDS = 86400;
 
-    public function __construct(private readonly Repository $store) {}
+    public function __construct(private readonly Repository $repository) {}
 
     /**
      * Atomically claim the key for processing (put-if-absent). Returns true to
@@ -43,7 +43,7 @@ class IdempotencyCache
     public function reserve(string $compositeKey): bool
     {
         try {
-            return $this->store->add($compositeKey, ['state' => 'pending'], self::RESERVATION_TTL_SECONDS);
+            return $this->repository->add($compositeKey, ['state' => 'pending'], self::RESERVATION_TTL_SECONDS);
         } catch (Throwable) {
             throw new IdempotencyCacheUnavailableException;
         }
@@ -55,7 +55,7 @@ class IdempotencyCache
     public function lookup(string $compositeKey): ?array
     {
         try {
-            $entry = $this->store->get($compositeKey);
+            $entry = $this->repository->get($compositeKey);
         } catch (Throwable) {
             throw new IdempotencyCacheUnavailableException;
         }
@@ -74,7 +74,7 @@ class IdempotencyCache
     public function complete(string $compositeKey, array $snapshot): void
     {
         try {
-            $this->store->put($compositeKey, $snapshot, self::RESULT_TTL_SECONDS);
+            $this->repository->put($compositeKey, $snapshot, self::RESULT_TTL_SECONDS);
         } catch (Throwable) {
             // Best effort (see the reserve() docblock).
         }
@@ -88,7 +88,7 @@ class IdempotencyCache
     public function release(string $compositeKey): void
     {
         try {
-            $this->store->forget($compositeKey);
+            $this->repository->forget($compositeKey);
         } catch (Throwable) {
             // Best effort (see above).
         }

@@ -12,8 +12,8 @@ use App\Foundation\AccessLog\Enums\AccessEventReason;
 readonly class AccessOutcome
 {
     public function __construct(
-        public AccessEvent $event,
-        public ?AccessEventReason $reason,
+        public AccessEvent $accessEvent,
+        public ?AccessEventReason $accessEventReason,
         public ?string $userId,
         public ?string $companyId = null,
     ) {}

@@ -52,8 +52,8 @@ class FeatureTestsExtendTheirNearestBaseTest extends FoundationTestCase
     {
         $tests = [];
 
-        foreach (File::allFiles(base_path(self::FEATURE_ROOT)) as $file) {
-            $relative = str_replace('\\', '/', $file->getRelativePathname());
+        foreach (File::allFiles(base_path(self::FEATURE_ROOT)) as $splFileInfo) {
+            $relative = str_replace('\\', '/', $splFileInfo->getRelativePathname());
 
             if (str_ends_with($relative, 'Test.php')) {
                 /** @var class-string $class */

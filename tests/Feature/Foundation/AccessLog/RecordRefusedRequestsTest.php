@@ -34,7 +34,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         // Given Contoso on the Free plan and the access log refusing writes
         $this->putOnPlan($this->company, BillingPlan::Free);
         $this->failAccessLogWrites();
-        $logged = $this->collectLogRecords();
+        $loggedArrayObject = $this->collectLogRecords();
 
         // When the member asks for a feature the company's plan lacks
         $response = $this->attemptGatedAction('two-gate/pro-feature', $this->member, $this->company);
@@ -42,7 +42,7 @@ class RecordRefusedRequestsTest extends FoundationTestCase
         // Then the refusal still answers, nothing is stored, and the lost row is reported
         $response->assertForbidden();
         $this->assertDatabaseCount('access_log', 0);
-        $this->assertWriteFailureReported($logged, [
+        $this->assertWriteFailureReported($loggedArrayObject, [
             'event' => 'forbidden',
             'reason' => null,
             'user_id' => $this->member->getKey(),
@@ -100,8 +100,8 @@ class RecordRefusedRequestsTest extends FoundationTestCase
 
         // Then it is refused, and the row names the member but no company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
+        $accessLogEntry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_FORBIDDEN, ApiErrorCode::CompanyAccessDenied);
     }
 
     #[Test]
@@ -142,10 +142,10 @@ class RecordRefusedRequestsTest extends FoundationTestCase
 
         // Then it is refused, and one unauthenticated row records the request
         $response->assertUnauthorized();
-        $entry = $this->assertRefusalLogged(AccessEvent::Unauthenticated, null, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
-        $this->assertLoggedRequest($response, $entry, 'GET api/_test/authenticated-probe');
-        $this->assertSeenOnceAsAPlatformRow($entry);
+        $accessLogEntry = $this->assertRefusalLogged(AccessEvent::Unauthenticated, null, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_UNAUTHORIZED, ApiErrorCode::Unauthenticated);
+        $this->assertLoggedRequest($response, $accessLogEntry, 'GET api/_test/authenticated-probe');
+        $this->assertSeenOnceAsAPlatformRow($accessLogEntry);
     }
 
     #[Test]
@@ -159,8 +159,8 @@ class RecordRefusedRequestsTest extends FoundationTestCase
 
         // Then it is refused, and the row names the member and the company
         $response->assertForbidden();
-        $entry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, $this->company);
-        $this->assertAnsweredAs($entry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
+        $accessLogEntry = $this->assertRefusalLogged(AccessEvent::Forbidden, $this->member, $this->company);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_FORBIDDEN, ApiErrorCode::FeatureNotAvailable);
     }
 
     #[Test]
@@ -173,8 +173,8 @@ class RecordRefusedRequestsTest extends FoundationTestCase
 
         // Then it is refused, and one not-found row records it
         $response->assertNotFound();
-        $entry = $this->assertRefusalLogged(AccessEvent::NotFound, null, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
+        $accessLogEntry = $this->assertRefusalLogged(AccessEvent::NotFound, null, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_NOT_FOUND, ApiErrorCode::ResourceNotFound);
     }
 
     #[Test]
@@ -188,22 +188,22 @@ class RecordRefusedRequestsTest extends FoundationTestCase
 
         // Then it is refused, and one rate-limited row records it under its own request id
         $response->assertTooManyRequests();
-        $entry = $this->assertRefusalLogged(AccessEvent::RateLimited, null, null);
-        $this->assertAnsweredAs($entry, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
-        $this->assertLoggedRequest($response, $entry, 'GET api/_test/rate-limit-general-probe');
+        $accessLogEntry = $this->assertRefusalLogged(AccessEvent::RateLimited, null, null);
+        $this->assertAnsweredAs($accessLogEntry, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
+        $this->assertLoggedRequest($response, $accessLogEntry, 'GET api/_test/rate-limit-general-probe');
         $this->assertIsString($allowedId);
-        $this->assertNotSame($allowedId, $entry->request_id);
+        $this->assertNotSame($allowedId, $accessLogEntry->request_id);
     }
 
-    protected function assertRefusalLogged(AccessEvent $event, ?User $actor, ?Company $company): AccessLogEntry
+    protected function assertRefusalLogged(AccessEvent $accessEvent, ?User $actor, ?Company $company): AccessLogEntry
     {
-        $entry = AccessLogEntry::query()->sole();
+        $accessLogEntry = AccessLogEntry::query()->sole();
 
-        $this->assertSame($event, $entry->event);
-        $this->assertNull($entry->reason);
-        $this->assertSame($actor?->getKey(), $entry->user_id);
-        $this->assertSame($company?->getKey(), $entry->company_id);
+        $this->assertSame($accessEvent, $accessLogEntry->event);
+        $this->assertNull($accessLogEntry->reason);
+        $this->assertSame($actor?->getKey(), $accessLogEntry->user_id);
+        $this->assertSame($company?->getKey(), $accessLogEntry->company_id);
 
-        return $entry;
+        return $accessLogEntry;
     }
 }

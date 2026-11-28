@@ -13,25 +13,25 @@ use App\Foundation\AuditTrail\Values\RequestOrigin;
 class AuditTrailWriter
 {
     /** @return array<string, mixed> */
-    public function actorAndOrigin(User $actor, ?string $roleCode, RequestOrigin $origin): array
+    public function actorAndOrigin(User $actor, ?string $roleCode, RequestOrigin $requestOrigin): array
     {
         return [
             'actor_user_id' => $actor->getKey(),
             'actor_role_code' => $roleCode,
             'actor_label' => $actor->name,
-            'ip_address' => $origin->ip,
-            'user_agent' => $origin->boundedUserAgent(),
-            'request_id' => $origin->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
         ];
     }
 
     /** @param array<string, mixed> $row */
-    public function write(array $row, AuditAction $action, string $severity): void
+    public function write(array $row, AuditAction $auditAction, string $severity): void
     {
         AuditEntry::query()->create([
             ...$row,
-            'action' => $action,
-            'description' => __('dsar.codes.action.'.$action->value),
+            'action' => $auditAction,
+            'description' => __('dsar.codes.action.'.$auditAction->value),
             'severity' => $severity,
             'recorded_at' => now(),
         ]);

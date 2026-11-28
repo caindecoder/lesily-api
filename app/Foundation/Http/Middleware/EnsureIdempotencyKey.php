@@ -25,7 +25,7 @@ use App\Foundation\Http\Exceptions\IdempotencyKeyProcessingException;
  */
 class EnsureIdempotencyKey
 {
-    public function __construct(private readonly IdempotencyCache $cache) {}
+    public function __construct(private readonly IdempotencyCache $idempotencyCache) {}
 
     public function handle(Request $request, Closure $next, string $mode): Response
     {
@@ -43,21 +43,21 @@ class EnsureIdempotencyKey
         $compositeKey = $this->compositeKey($request, $key);
         $requestHash = $this->requestHash($request);
 
-        if (! $this->cache->reserve($compositeKey)) {
+        if (! $this->idempotencyCache->reserve($compositeKey)) {
             return $this->resolveExisting($compositeKey, $requestHash);
         }
 
         $response = $next($request);
 
         if ($response->isSuccessful()) {
-            $this->cache->complete($compositeKey, $this->snapshot($response, $requestHash));
+            $this->idempotencyCache->complete($compositeKey, $this->snapshot($response, $requestHash));
         } else {
             // Release a failed attempt's reservation so the key is retryable
             // immediately rather than waiting out its TTL. Safe for mutations whose
             // side-effects are atomic + uniqueness-backstopped (register persists in
             // one event-sourced transaction behind its DB-unique 409). Laravel's
             // routing pipeline also lands thrown exceptions here as a rendered non-2xx.
-            $this->cache->release($compositeKey);
+            $this->idempotencyCache->release($compositeKey);
         }
 
         return $response;
@@ -71,7 +71,7 @@ class EnsureIdempotencyKey
      */
     protected function resolveExisting(string $compositeKey, string $requestHash): Response
     {
-        $entry = $this->cache->lookup($compositeKey);
+        $entry = $this->idempotencyCache->lookup($compositeKey);
 
         if ($entry === null || ($entry['state'] ?? null) === 'pending') {
             throw new IdempotencyKeyProcessingException;

@@ -20,10 +20,10 @@ class LockContention
 
     private const int MYSQL_DEADLOCK = 1213;
 
-    public static function caused(QueryException $exception): bool
+    public static function caused(QueryException $queryException): bool
     {
         return in_array(
-            $exception->errorInfo[1] ?? null,
+            $queryException->errorInfo[1] ?? null,
             [self::MYSQL_LOCK_WAIT_TIMEOUT, self::MYSQL_DEADLOCK],
             true,
         );

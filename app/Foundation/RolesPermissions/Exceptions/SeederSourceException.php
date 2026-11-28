@@ -12,9 +12,9 @@ class SeederSourceException extends RuntimeException
         return new self("RBAC seeder source file missing or unreadable: {$path}");
     }
 
-    public static function parseFailure(string $path, ?Throwable $cause = null): self
+    public static function parseFailure(string $path, ?Throwable $throwable = null): self
     {
-        return new self("RBAC seeder source file unparseable: {$path}", previous: $cause);
+        return new self("RBAC seeder source file unparseable: {$path}", previous: $throwable);
     }
 
     public static function unknownCode(string $code): self

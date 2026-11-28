@@ -17,36 +17,36 @@ class ListAuditTrailInteractor
     /**
      * @return LengthAwarePaginator<int, AuditEntry>
      */
-    public function execute(ListAuditTrailCommand $command, Company $company): LengthAwarePaginator
+    public function execute(ListAuditTrailCommand $listAuditTrailCommand, Company $company): LengthAwarePaginator
     {
         return AuditEntry::query()
             ->leftJoin('roles', 'roles.code', '=', 'audit_trail.actor_role_code')
             ->select(['audit_trail.*', 'roles.name as actor_role_name'])
             ->where('audit_trail.company_id', $company->getKey())
-            ->when($command->within, fn (Builder $query, CarbonPeriod $within) => $query
-                ->where('audit_trail.recorded_at', '>=', $within->getStartDate())
-                ->where('audit_trail.recorded_at', '<', $within->getIncludedEndDate()->toImmutable()->addDay()))
-            ->when($command->actor, fn (Builder $query, string $actor) => $this->byActor($query, $actor))
-            ->when($command->action, fn (Builder $query, AuditAction $action) => $query->where('audit_trail.action', $action))
-            ->when($command->subjectType, fn (Builder $query, AuditSubjectType $type) => $query->where('audit_trail.subject_type', $type))
+            ->when($listAuditTrailCommand->within, fn (Builder $builder, CarbonPeriod $carbonPeriod) => $builder
+                ->where('audit_trail.recorded_at', '>=', $carbonPeriod->getStartDate())
+                ->where('audit_trail.recorded_at', '<', $carbonPeriod->getIncludedEndDate()->toImmutable()->addDay()))
+            ->when($listAuditTrailCommand->actor, fn (Builder $builder, string $actor) => $this->byActor($builder, $actor))
+            ->when($listAuditTrailCommand->action, fn (Builder $builder, AuditAction $auditAction) => $builder->where('audit_trail.action', $auditAction))
+            ->when($listAuditTrailCommand->subjectType, fn (Builder $builder, AuditSubjectType $auditSubjectType) => $builder->where('audit_trail.subject_type', $auditSubjectType))
             ->orderByDesc('audit_trail.recorded_at')
             ->orderByDesc('audit_trail.id')
-            ->paginate(perPage: $command->perPage ?? 15, page: $command->page ?? 1);
+            ->paginate(perPage: $listAuditTrailCommand->perPage ?? 15, page: $listAuditTrailCommand->page ?? 1);
     }
 
     /**
-     * @param  Builder<AuditEntry>  $query
+     * @param  Builder<AuditEntry>  $auditEntries
      * @return Builder<AuditEntry>
      */
-    protected function byActor(Builder $query, string $actor): Builder
+    protected function byActor(Builder $auditEntries, string $actor): Builder
     {
         if ($actor === MemberOrLesilySupport::LESILY_SUPPORT) {
-            return $query->where('audit_trail.actor_role_code', AuditEntry::STAFF_ROLE_CODE);
+            return $auditEntries->where('audit_trail.actor_role_code', AuditEntry::STAFF_ROLE_CODE);
         }
 
-        return $query
+        return $auditEntries
             ->where('audit_trail.actor_user_id', $actor)
-            ->where(fn (Builder $member) => $member
+            ->where(fn (Builder $builder) => $builder
                 ->whereNull('audit_trail.actor_role_code')
                 ->orWhere('audit_trail.actor_role_code', '!=', AuditEntry::STAFF_ROLE_CODE));
     }

@@ -45,14 +45,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         'event', 'event_words', 'outcome', 'outcome_words', 'ip_address', 'device',
     ];
 
-    protected Company $enterprise;
-
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->putOnPlan($this->company, BillingPlan::Enterprise);
-        $this->enterprise = $this->company;
     }
 
     #[Test]
@@ -61,7 +58,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given no one signed in
 
         // When a guest exports company A's audit logs
-        $response = $this->exportAuditLogs(null, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs(null, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the guest is refused as unauthenticated
         $this->assertUnauthenticated($response);
@@ -75,7 +72,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $member = $this->memberWithRole($roleCode);
 
         // When the member exports the company's audit logs
-        $response = $this->exportAuditLogs($member, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($member, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the role is refused
         $this->assertRoleInsufficient($response, 'audit.view');
@@ -120,7 +117,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports in a format not offered
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'xlsx']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'xlsx']);
 
         // Then the export is rejected and no audit row records it
         $response->assertUnprocessable();
@@ -131,10 +128,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_a_member_exports_a_company_they_are_not_in_then_access_is_denied(): void
     {
         // Given the owner of the Enterprise company, who is not a member of another Enterprise company
-        $other = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
+        $otherEnterpriseCompany = Company::factory()->onPlan(BillingPlan::Enterprise)->createOne();
 
         // When the owner exports the other company's audit logs
-        $response = $this->exportAuditLogs($this->owner, $other, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $otherEnterpriseCompany, ['format' => 'csv']);
 
         // Then access to the other company is denied
         $this->assertCompanyAccessDenied($response);
@@ -150,7 +147,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports without a usable format
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, $query);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, $query);
 
         // Then the format is rejected with the reason
         $this->assertValidationRejected($response, 'format', $message);
@@ -166,7 +163,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports with the malformed filter
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', ...$query]);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv', ...$query]);
 
         // Then the filter is rejected with the reason
         $this->assertValidationRejected($response, $field, $message);
@@ -179,7 +176,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports with a key the export does not take
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', $key => '2']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv', $key => '2']);
 
         // Then the key is rejected
         $this->assertValidationRejected($response, $key, 'This filter is not supported.');
@@ -189,10 +186,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_an_eleventh_export_is_made_within_the_hour_then_it_is_throttled(): void
     {
         // Given the owner has exported the audit logs ten times this hour
-        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->exhaustTheHourlyExports($this->owner, $this->contosoCompany);
 
         // When the owner exports an eleventh time
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the export is throttled
         $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
@@ -202,11 +199,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_the_company_is_named_in_other_letter_case_then_the_hourly_limit_still_applies(): void
     {
         // Given the owner has exported the audit logs ten times this hour
-        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->exhaustTheHourlyExports($this->owner, $this->contosoCompany);
 
         // When the owner exports again, naming the company in capital letters
         Sanctum::actingAs($this->owner);
-        $response = $this->getJson('/api/v1/audit-logs/export?format=csv', ['X-Company-Context' => strtoupper($this->enterprise->getKey())]);
+        $response = $this->getJson('/api/v1/audit-logs/export?format=csv', ['X-Company-Context' => strtoupper($this->contosoCompany->getKey())]);
 
         // Then the export is throttled
         $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
@@ -216,11 +213,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_less_than_an_hour_has_passed_then_the_export_is_still_throttled(): void
     {
         // Given the owner exported the audit logs ten times, 59 minutes ago
-        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->exhaustTheHourlyExports($this->owner, $this->contosoCompany);
         $this->travel(59)->minutes();
 
         // When the owner exports again
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the export is throttled
         $this->assertRefusedWith($response, Response::HTTP_TOO_MANY_REQUESTS, ApiErrorCode::RateLimitExceeded);
@@ -230,10 +227,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_nine_exports_were_made_this_hour_then_the_tenth_is_served(): void
     {
         // Given the owner has exported the audit logs nine times this hour
-        $this->exportRepeatedly($this->owner, $this->enterprise, 9);
+        $this->exportRepeatedly($this->owner, $this->contosoCompany, 9);
 
         // When the owner exports a tenth time
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the export is served
         $response->assertOk();
@@ -243,11 +240,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_an_hour_has_passed_then_the_export_is_allowed_again(): void
     {
         // Given the owner exported the audit logs ten times, an hour ago
-        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->exhaustTheHourlyExports($this->owner, $this->contosoCompany);
         $this->travel(61)->minutes();
 
         // When the owner exports again
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the export is served
         $response->assertOk();
@@ -261,7 +258,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_one_member_used_the_hourly_limit_then_another_exporter_is_served(Closure $exporter): void
     {
         // Given the owner has used this hour's ten exports of the Enterprise company
-        $this->exhaustTheHourlyExports($this->owner, $this->enterprise);
+        $this->exhaustTheHourlyExports($this->owner, $this->contosoCompany);
         [$actor, $company] = $exporter($this);
 
         // When the other exporter exports
@@ -275,28 +272,28 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_another_company_has_logs_then_its_rows_are_not_exported(): void
     {
         // Given a sign-in in the Enterprise company and one in company B
-        $ours = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
-        $this->aSignInAt('2026-11-10 12:00:00')->forCompany($this->companyB)->createOne();
+        $accessLogEntry = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
+        $this->aSignInAt('2026-11-10 12:00:00')->forCompany($this->otherCompany)->createOne();
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then only the company's own row is in the file
-        $this->assertSame([$ours->getKey()], array_column($this->csvRowsOf($response), 'id'));
+        $this->assertSame([$accessLogEntry->getKey()], array_column($this->csvRowsOf($response), 'id'));
     }
 
     #[Test]
     public function when_rows_lie_past_the_horizon_then_the_export_starts_at_the_horizon(): void
     {
         // Given a sign-in on the horizon's first moment and one just before it
-        $first = $this->aSignInAt('2019-11-15 00:00:00')->createOne();
+        $accessLogEntry = $this->aSignInAt('2019-11-15 00:00:00')->createOne();
         $this->aSignInAt('2019-11-14 23:59:59')->createOne();
 
         // When the owner exports from further back than the plan keeps
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', 'within' => '2015-01-01,2026-11-15']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv', 'within' => '2015-01-01,2026-11-15']);
 
         // Then the file starts at the horizon
-        $this->assertSame([$first->getKey()], array_column($this->csvRowsOf($response), 'id'));
+        $this->assertSame([$accessLogEntry->getKey()], array_column($this->csvRowsOf($response), 'id'));
     }
 
     #[Test]
@@ -305,7 +302,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given a change Lesily staff made in the Enterprise company
         AuditEntry::factory()
-            ->forCompany($this->enterprise)
+            ->forCompany($this->contosoCompany)
             ->byStaff(User::factory()->named('Staff Member')->createOne())
             ->ofAction(AuditAction::RoleChanged, AuditSubjectType::User)
             ->fromOrigin('192.0.2.44', 'Staff browser')
@@ -313,7 +310,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->createOne();
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => $format]);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => $format]);
 
         // Then the row names Lesily support and shows no address or device
         $expected = ['user_id' => null, 'user_name' => 'Lesily support', 'ip_address' => null, 'device' => null];
@@ -330,7 +327,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given no audit-log rows in the Enterprise company
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => $format]);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => $format]);
 
         // Then the file holds no rows
         $this->assertSame($file, $response->streamedContent());
@@ -342,33 +339,33 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given a member's failed sign-in and another person's sign-in from elsewhere
         $member = User::factory()->createOne();
-        $match = $this->aSignInAt('2026-11-10 12:00:00')->byUser($member)
+        $accessLogEntry = $this->aSignInAt('2026-11-10 12:00:00')->byUser($member)
             ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
             ->fromOrigin('203.0.113.5', 'Firefox on Linux')->createOne();
         $this->aSignInAt('2026-11-10 12:00:00')->fromOrigin('198.51.100.7', 'Edge on Windows')->createOne();
         $search = ['user' => $member->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5'];
 
         // When the owner exports with the one search key
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', $key => $search[$key]]);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv', $key => $search[$key]]);
 
         // Then only the matching row is in the file
-        $this->assertSame([$match->getKey()], array_column($this->csvRowsOf($response), 'id'));
+        $this->assertSame([$accessLogEntry->getKey()], array_column($this->csvRowsOf($response), 'id'));
     }
 
     #[Test]
     public function when_rows_were_inserted_out_of_order_then_they_export_newest_first(): void
     {
         // Given two sign-ins sharing a time, and a newer one inserted between them
-        $earlier = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
-        $newest = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
-        $sameTime = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
+        $earlierAccessLogEntry = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
+        $newestAccessLogEntry = $this->aSignInAt('2026-11-10 12:00:00')->createOne();
+        $sameTimeAccessLogEntry = $this->aSignInAt('2026-11-10 10:00:00')->createOne();
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the newest comes first, and rows that share a time by id, newest first
         $this->assertSame(
-            [$newest->getKey(), ...$this->newestIdFirst([$earlier->getKey(), $sameTime->getKey()])],
+            [$newestAccessLogEntry->getKey(), ...$this->newestIdFirst([$earlierAccessLogEntry->getKey(), $sameTimeAccessLogEntry->getKey()])],
             array_column($this->csvRowsOf($response), 'id'),
         );
     }
@@ -381,7 +378,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $this->aSignInAt('2026-11-10 12:00:00')->fromOrigin('203.0.113.5', "{$start}HYPERLINK(\"http://x.test\")")->createOne();
 
         // When the owner exports the audit logs as CSV
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the device is written as text, not as a formula
         $this->assertSame(["'{$start}HYPERLINK(\"http://x.test\")"], array_column($this->csvRowsOf($response), 'device'));
@@ -392,14 +389,14 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given sign-ins before, inside and after a date range
         $this->aSignInAt('2026-10-31 23:59:59')->createOne();
-        $inside = $this->aSignInAt('2026-11-05 12:00:00')->createOne();
+        $accessLogEntry = $this->aSignInAt('2026-11-05 12:00:00')->createOne();
         $this->aSignInAt('2026-11-11 00:00:00')->createOne();
 
         // When the owner exports the range
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv', 'within' => '2026-11-01,2026-11-10']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv', 'within' => '2026-11-01,2026-11-10']);
 
         // Then only the row inside the range is in the file
-        $this->assertSame([$inside->getKey()], array_column($this->csvRowsOf($response), 'id'));
+        $this->assertSame([$accessLogEntry->getKey()], array_column($this->csvRowsOf($response), 'id'));
     }
 
     #[Test]
@@ -413,11 +410,11 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $this->foldAfterTheFirstPage($rows[0]);
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then every row is in the file once, newest first
         $this->assertSame(
-            array_map(fn (AccessLogEntry $row): string => $row->getKey(), $rows),
+            array_map(fn (AccessLogEntry $accessLogEntry): string => $accessLogEntry->getKey(), $rows),
             array_column($this->csvRowsOf($response), 'id'),
         );
     }
@@ -434,7 +431,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         ];
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then each row is in the file once, by id, newest first
         $this->assertSame($this->newestIdFirst($ids), array_column($this->csvRowsOf($response), 'id'));
@@ -445,29 +442,29 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_rows_are_exported_then_they_are_read_a_thousand_to_a_page(int $rows, int $reads): void
     {
         // Given the export's own page size, and a full page of sign-ins or one fewer
-        $pageReads = $this->recordPageReads();
+        $pageReadCollection = $this->recordPageReads();
         $this->signInsAt($rows, '2026-11-10 12:00:00');
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then every row is in the file, read a thousand to a page
         $this->assertCount($rows, $this->csvRowsOf($response));
-        $this->assertSame($reads, $pageReads->count());
+        $this->assertSame($reads, $pageReadCollection->count());
     }
 
     #[Test]
     public function when_the_logs_are_exported_then_the_file_stops_at_the_export_moment(): void
     {
         // Given a sign-in a second before the export and one at its moment
-        $before = $this->aSignInAt('2026-11-15 14:29:59')->createOne();
+        $accessLogEntry = $this->aSignInAt('2026-11-15 14:29:59')->createOne();
         $this->aSignInAt('2026-11-15 14:30:00')->createOne();
 
         // When the owner exports the audit logs
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the file holds only what was logged before the export began, not the export's own row
-        $this->assertSame([$before->getKey()], array_column($this->csvRowsOf($response), 'id'));
+        $this->assertSame([$accessLogEntry->getKey()], array_column($this->csvRowsOf($response), 'id'));
     }
 
     #[Test]
@@ -492,7 +489,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         $member = $this->memberWithRole($roleCode);
 
         // When the member exports the company's audit logs
-        $response = $this->exportAuditLogs($member, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($member, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the file is served
         $this->assertExportServed($response, 'csv');
@@ -503,16 +500,16 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     {
         // Given a member's folded failed sign-in and an admin's password change
         $member = User::factory()->named('Nimal Perera')->createOne();
-        $signIn = AccessLogEntry::factory()
-            ->forCompany($this->enterprise)
+        $accessLogEntry = AccessLogEntry::factory()
+            ->forCompany($this->contosoCompany)
             ->byUser($member)
             ->ofEvent(AccessEvent::LoginFailed, AccessEventReason::WrongPassword)
             ->fromOrigin('203.0.113.5', 'Firefox on Linux')
             ->seenAt(CarbonImmutable::parse('2026-11-10 09:06:00'))
             ->foldedSince(CarbonImmutable::parse('2026-11-10 09:02:00'), 6)
             ->createOne();
-        $change = AuditEntry::factory()
-            ->forCompany($this->enterprise)
+        $auditEntry = AuditEntry::factory()
+            ->forCompany($this->contosoCompany)
             ->byMember(User::factory()->named('Kamala Silva')->createOne(), 'admin')
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
             ->fromOrigin('198.51.100.20', 'Safari on macOS')
@@ -520,13 +517,13 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->createOne();
 
         // When the owner exports the audit logs as CSV
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the file holds both rows, newest first, every field shown
         $this->assertExportServed($response, 'csv');
         $this->assertSame([
             [
-                'id' => $signIn->getKey(), 'kind' => 'access', 'time' => '2026-11-10T09:06:00.000000Z',
+                'id' => $accessLogEntry->getKey(), 'kind' => 'access', 'time' => '2026-11-10T09:06:00.000000Z',
                 'first_seen_at' => '2026-11-10T09:02:00.000000Z', 'occurrences' => '6',
                 'user_id' => $member->getKey(), 'user_name' => 'Nimal Perera',
                 'event' => 'login_failed', 'event_words' => 'Sign-in failed',
@@ -534,9 +531,9 @@ class ExportAuditLogsTest extends AuditTrailTestCase
                 'ip_address' => '203.0.113.5', 'device' => 'Firefox on Linux',
             ],
             [
-                'id' => $change->getKey(), 'kind' => 'audit', 'time' => '2026-11-09T16:45:00.000000Z',
+                'id' => $auditEntry->getKey(), 'kind' => 'audit', 'time' => '2026-11-09T16:45:00.000000Z',
                 'first_seen_at' => '2026-11-09T16:45:00.000000Z', 'occurrences' => '1',
-                'user_id' => $change->actor_user_id, 'user_name' => 'Kamala Silva',
+                'user_id' => $auditEntry->actor_user_id, 'user_name' => 'Kamala Silva',
                 'event' => 'password_changed', 'event_words' => 'Password changed',
                 'outcome' => '', 'outcome_words' => '',
                 'ip_address' => '198.51.100.20', 'device' => 'Safari on macOS',
@@ -553,10 +550,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
             ->foldedSince(CarbonImmutable::parse('2026-11-10 09:02:00'), 6)
             ->createOne();
         $this->aChangeAt('2026-11-09 16:45:00')->createOne();
-        $listed = $this->viewAuditLogs($this->owner, $this->enterprise, ['per_page' => 100])->json('data');
+        $listed = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['per_page' => 100])->json('data');
 
         // When the owner exports the audit logs as JSON
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'json']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'json']);
 
         // Then the file holds the rows the list showed, in the list's order
         $this->assertExportServed($response, 'json');
@@ -570,7 +567,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports their own failed sign-ins from one address, from further back than the plan keeps, as JSON
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, [
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, [
             'format' => 'json', 'within' => '2015-01-01,2026-11-14',
             'user' => $this->owner->getKey(), 'event' => 'login_failed', 'ip' => '203.0.113.5',
         ]);
@@ -590,7 +587,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
         // Given the owner of the Enterprise company (setUp)
 
         // When the owner exports everything, with no date range and no search
-        $response = $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $response = $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // Then the row records the plan's horizon to today and no filter
         $response->assertOk();
@@ -602,10 +599,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public function when_the_logs_are_exported_then_the_export_shows_in_the_audit_logs(): void
     {
         // Given the owner exported the audit logs
-        $this->exportAuditLogs($this->owner, $this->enterprise, ['format' => 'csv']);
+        $this->exportAuditLogs($this->owner, $this->contosoCompany, ['format' => 'csv']);
 
         // When the owner searches the audit logs for exports
-        $response = $this->viewAuditLogs($this->owner, $this->enterprise, ['event' => 'audit_logs_exported']);
+        $response = $this->viewAuditLogs($this->owner, $this->contosoCompany, ['event' => 'audit_logs_exported']);
 
         // Then the export is listed under the owner's name
         $response->assertOk();
@@ -633,10 +630,10 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public static function provideStandingsWithoutExport(): array
     {
         return [
-            'free' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Free)],
-            'starter' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Starter)],
-            'pro' => [fn (CompanyFactory $company) => $company->onPlan(BillingPlan::Pro)],
-            'an expired trial' => [fn (CompanyFactory $company) => $company->trialExpired()],
+            'free' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Free)],
+            'starter' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Starter)],
+            'pro' => [fn (CompanyFactory $companyFactory) => $companyFactory->onPlan(BillingPlan::Pro)],
+            'an expired trial' => [fn (CompanyFactory $companyFactory) => $companyFactory->trialExpired()],
         ];
     }
 
@@ -685,8 +682,8 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     public static function provideOtherExporters(): array
     {
         return [
-            'another member of the company' => [fn (self $test) => [$test->memberWithRole('admin'), $test->enterprise]],
-            'the same owner in another company' => [fn (self $test) => $test->theOwnerInAnotherEnterprise()],
+            'another member of the company' => [fn (self $exportAuditLogsTest) => [$exportAuditLogsTest->memberWithRole('admin'), $exportAuditLogsTest->contosoCompany]],
+            'the same owner in another company' => [fn (self $exportAuditLogsTest) => $exportAuditLogsTest->theOwnerInAnotherEnterprise()],
         ];
     }
 
@@ -788,17 +785,17 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      * Once the export's first page has been read, the row is seen again after the export began,
      * as the access log folds a repeated refusal.
      */
-    protected function foldAfterTheFirstPage(AccessLogEntry $row): void
+    protected function foldAfterTheFirstPage(AccessLogEntry $accessLogEntry): void
     {
         $folded = false;
 
-        DB::listen(function (QueryExecuted $query) use (&$folded, $row): void {
-            if ($folded || ! str_contains($query->sql, 'union all')) {
+        DB::listen(function (QueryExecuted $queryExecuted) use (&$folded, $accessLogEntry): void {
+            if ($folded || ! str_contains($queryExecuted->sql, 'union all')) {
                 return;
             }
 
             $folded = true;
-            DB::table('access_log')->where('id', $row->getKey())->update(['last_seen_at' => '2026-11-15 14:31:00']);
+            DB::table('access_log')->where('id', $accessLogEntry->getKey())->update(['last_seen_at' => '2026-11-15 14:31:00']);
         });
     }
 
@@ -809,27 +806,27 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      */
     protected function recordPageReads(): Collection
     {
-        $pageReads = collect();
+        $pageReadCollection = collect();
 
-        $this->app->instance(AuditLogRows::class, new class($pageReads) extends AuditLogRows
+        $this->app->instance(AuditLogRows::class, new class($pageReadCollection) extends AuditLogRows
         {
             /**
-             * @param  Collection<int, ?stdClass>  $pageReads
+             * @param  Collection<int, ?stdClass>  $pageReadCollection
              */
-            public function __construct(protected Collection $pageReads)
+            public function __construct(protected Collection $pageReadCollection)
             {
                 parent::__construct();
             }
 
-            protected function merged(array $halves, ?stdClass $after): Builder
+            protected function merged(array $halves, ?stdClass $stdClass): Builder
             {
-                $this->pageReads->push($after);
+                $this->pageReadCollection->push($stdClass);
 
-                return parent::merged($halves, $after);
+                return parent::merged($halves, $stdClass);
             }
         });
 
-        return $pageReads;
+        return $pageReadCollection;
     }
 
     protected function exhaustTheHourlyExports(User $actor, Company $company): void
@@ -847,7 +844,7 @@ class ExportAuditLogsTest extends AuditTrailTestCase
     protected function aSignInAt(string $seenAt): AccessLogEntryFactory
     {
         return AccessLogEntry::factory()
-            ->forCompany($this->enterprise)
+            ->forCompany($this->contosoCompany)
             ->byUser(User::factory()->createOne())
             ->seenAt(CarbonImmutable::parse($seenAt));
     }
@@ -857,20 +854,20 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      */
     protected function signInsAt(int $count, string $seenAt): void
     {
-        $signIn = $this->aSignInAt($seenAt);
-        $rows = Collection::times($count, function () use ($signIn): array {
-            $row = $signIn->makeOne();
+        $accessLogEntryFactory = $this->aSignInAt($seenAt);
+        $rowCollection = Collection::times($count, function () use ($accessLogEntryFactory): array {
+            $accessLogEntry = $accessLogEntryFactory->makeOne();
 
-            return ['id' => $row->newUniqueId()] + $row->getAttributes();
+            return ['id' => $accessLogEntry->newUniqueId()] + $accessLogEntry->getAttributes();
         });
 
-        AccessLogEntry::query()->insert($rows->all());
+        AccessLogEntry::query()->insert($rowCollection->all());
     }
 
     protected function aChangeAt(string $recordedAt): AuditEntryFactory
     {
         return AuditEntry::factory()
-            ->forCompany($this->enterprise)
+            ->forCompany($this->contosoCompany)
             ->byMember(User::factory()->createOne(), 'admin')
             ->ofAction(AuditAction::PasswordChanged, AuditSubjectType::User)
             ->recordedAt(CarbonImmutable::parse($recordedAt));
@@ -920,17 +917,17 @@ class ExportAuditLogsTest extends AuditTrailTestCase
      */
     protected function assertExportRecorded(array $metadata): void
     {
-        $entry = AuditEntry::query()->where('action', AuditAction::AuditLogsExported)->sole();
+        $auditEntry = AuditEntry::query()->where('action', AuditAction::AuditLogsExported)->sole();
 
         $this->assertSame(
-            [AuditAction::AuditLogsExported, 'warning', AuditSubjectType::Company, $this->enterprise->getKey(), $this->owner->getKey()],
-            [$entry->action, $entry->severity, $entry->subject_type, $entry->subject_id, $entry->actor_user_id],
+            [AuditAction::AuditLogsExported, 'warning', AuditSubjectType::Company, $this->contosoCompany->getKey(), $this->owner->getKey()],
+            [$auditEntry->action, $auditEntry->severity, $auditEntry->subject_type, $auditEntry->subject_id, $auditEntry->actor_user_id],
         );
         $this->assertSame(
-            [$this->enterprise->getKey(), 'owner', '127.0.0.1', 'Symfony'],
-            [$entry->company_id, $entry->actor_role_code, $entry->ip_address, $entry->user_agent],
+            [$this->contosoCompany->getKey(), 'owner', '127.0.0.1', 'Symfony'],
+            [$auditEntry->company_id, $auditEntry->actor_role_code, $auditEntry->ip_address, $auditEntry->user_agent],
         );
-        $stored = $entry->metadata;
+        $stored = $auditEntry->metadata;
         $this->assertIsArray($stored);
         ksort($stored);
         ksort($metadata);

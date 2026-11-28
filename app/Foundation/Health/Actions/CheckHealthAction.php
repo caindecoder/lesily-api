@@ -23,12 +23,12 @@ class CheckHealthAction
             'queue' => $this->checkQueue(),
         ];
 
-        $status = in_array('down', $subsystems, true)
+        $healthStatus = in_array('down', $subsystems, true)
             ? HealthStatus::Unhealthy
             : HealthStatus::Healthy;
 
         return [
-            'status' => $status,
+            'status' => $healthStatus,
             'checked_at' => CarbonImmutable::now('UTC')->format('Y-m-d\TH:i:s\Z'),
             'subsystems' => $subsystems,
         ];
@@ -40,8 +40,8 @@ class CheckHealthAction
             DB::connection()->getPdo();
 
             return 'up';
-        } catch (Exception $e) {
-            report($e);
+        } catch (Exception $exception) {
+            report($exception);
 
             return 'down';
         }
@@ -53,8 +53,8 @@ class CheckHealthAction
             Redis::connection()->ping();
 
             return 'up';
-        } catch (Exception $e) {
-            report($e);
+        } catch (Exception $exception) {
+            report($exception);
 
             return 'down';
         }
@@ -66,8 +66,8 @@ class CheckHealthAction
             Queue::size();
 
             return 'up';
-        } catch (Exception $e) {
-            report($e);
+        } catch (Exception $exception) {
+            report($exception);
 
             return 'down';
         }

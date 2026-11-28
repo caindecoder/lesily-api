@@ -28,9 +28,9 @@ class EventStoreFoundationTest extends FoundationTestCase
         FixtureAggregate::retrieve($aggregateUuid)->recordThing()->persist();
 
         // Then the event is stored but carries no company scope
-        $stored = LesilyStoredEvent::query()->get();
+        $eloquentStoredEvents = LesilyStoredEvent::query()->get();
 
-        $this->assertEventStoredForCompany($stored, FixtureThingHappened::class, null);
+        $this->assertEventStoredForCompany($eloquentStoredEvents, FixtureThingHappened::class, null);
     }
 
     // Edge — the tenant boundary: a company scope must exclude other companies' events.
@@ -44,10 +44,10 @@ class EventStoreFoundationTest extends FoundationTestCase
         FixtureAggregate::retrieve((string) Str::uuid())->recordThingFor($companyB)->persist();
 
         // When the store is queried for company A only
-        $stored = LesilyStoredEvent::query()->whereForCompany($companyA)->get();
+        $eloquentStoredEvents = LesilyStoredEvent::query()->whereForCompany($companyA)->get();
 
         // Then company B's event is excluded
-        $this->assertEventStoredForCompany($stored, FixtureThingHappened::class, $companyA);
+        $this->assertEventStoredForCompany($eloquentStoredEvents, FixtureThingHappened::class, $companyA);
     }
 
     // Happy — the headline behaviour: a company's event is stored and retrievable in its scope.
@@ -62,9 +62,9 @@ class EventStoreFoundationTest extends FoundationTestCase
         FixtureAggregate::retrieve($aggregateUuid)->recordThingFor($companyId)->persist();
 
         // Then exactly that event is retrievable through the company-scoped store
-        $stored = LesilyStoredEvent::query()->whereForCompany($companyId)->get();
+        $eloquentStoredEvents = LesilyStoredEvent::query()->whereForCompany($companyId)->get();
 
-        $this->assertEventStoredForCompany($stored, FixtureThingHappened::class, $companyId);
+        $this->assertEventStoredForCompany($eloquentStoredEvents, FixtureThingHappened::class, $companyId);
     }
 
     // Happy — the event-sourcing loop closes: state is rebuilt by replaying stored events.
@@ -76,10 +76,10 @@ class EventStoreFoundationTest extends FoundationTestCase
         FixtureAggregate::retrieve($aggregateUuid)->recordThing()->persist();
 
         // When a fresh instance is retrieved, forcing reconstitution from the event store
-        $rebuilt = FixtureAggregate::retrieve($aggregateUuid);
+        $fixtureAggregate = FixtureAggregate::retrieve($aggregateUuid);
 
         // Then its state reflects the replayed event
-        $this->assertSame(1, $rebuilt->thingCount());
+        $this->assertSame(1, $fixtureAggregate->thingCount());
     }
 
     // Happy — tenant identity survives reconstitution: a reconstituted aggregate keeps scoping new events.
@@ -95,17 +95,17 @@ class EventStoreFoundationTest extends FoundationTestCase
         FixtureAggregate::retrieve($aggregateUuid)->recordThing()->persist();
 
         // Then both events are stored in the original company's scope
-        $stored = LesilyStoredEvent::query()->whereForCompany($companyId)->get();
+        $eloquentStoredEvents = LesilyStoredEvent::query()->whereForCompany($companyId)->get();
 
-        $this->assertCount(2, $stored);
+        $this->assertCount(2, $eloquentStoredEvents);
     }
 
-    protected function assertEventStoredForCompany(EloquentStoredEventCollection $stored, string $expectedEventClass, ?string $expectedCompanyId): void
+    protected function assertEventStoredForCompany(EloquentStoredEventCollection $eloquentStoredEvents, string $expectedEventClass, ?string $expectedCompanyId): void
     {
-        $this->assertCount(1, $stored);
+        $this->assertCount(1, $eloquentStoredEvents);
 
-        $event = $stored->firstOrFail();
-        $this->assertSame($expectedEventClass, $event->event_class);
-        $this->assertSame($expectedCompanyId, $event->company_id);
+        $eloquentStoredEvent = $eloquentStoredEvents->firstOrFail();
+        $this->assertSame($expectedEventClass, $eloquentStoredEvent->event_class);
+        $this->assertSame($expectedCompanyId, $eloquentStoredEvent->company_id);
     }
 }
