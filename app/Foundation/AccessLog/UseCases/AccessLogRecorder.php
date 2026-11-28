@@ -30,37 +30,37 @@ class AccessLogRecorder
     /** A refusal row takes repeats for this long after its first one. */
     protected const FOLD_WINDOW_MINUTES = 5;
 
-    private ?AccessOutcome $outcome = null;
+    private ?AccessOutcome $accessOutcome = null;
 
-    public function note(AccessEvent $event, ?AccessEventReason $reason, ?User $user): void
+    public function note(AccessEvent $accessEvent, ?AccessEventReason $accessEventReason, ?User $user): void
     {
-        $this->outcome = new AccessOutcome($event, $reason, $user?->getKey());
+        $this->accessOutcome = new AccessOutcome($accessEvent, $accessEventReason, $user?->getKey());
     }
 
     /** A noted outcome is never folded — one row per company of its user; a refusal folds into a recent twin. */
     public function write(Request $request, Response $response): void
     {
-        $noted = $this->outcome;
-        $this->outcome = null;
+        $notedAccessOutcome = $this->accessOutcome;
+        $this->accessOutcome = null;
 
-        if ($noted !== null) {
-            $this->writeOrReport($noted, fn () => $this->insertForEachCompany($noted, $request, $response));
+        if ($notedAccessOutcome !== null) {
+            $this->writeOrReport($notedAccessOutcome, fn () => $this->insertForEachCompany($notedAccessOutcome, $request, $response));
 
             return;
         }
 
-        $refusal = $this->refusal($request, $response);
+        $refusalAccessOutcome = $this->refusal($request, $response);
 
-        if ($refusal !== null) {
-            $this->writeOrReport($refusal, fn () => $this->fold($refusal, $request, $response));
+        if ($refusalAccessOutcome !== null) {
+            $this->writeOrReport($refusalAccessOutcome, fn () => $this->fold($refusalAccessOutcome, $request, $response));
         }
     }
 
     protected function refusal(Request $request, Response $response): ?AccessOutcome
     {
-        $event = AccessEvent::refusalFor($response->getStatusCode());
+        $accessEvent = AccessEvent::refusalFor($response->getStatusCode());
 
-        if ($event === null) {
+        if ($accessEvent === null) {
             return null;
         }
 
@@ -69,38 +69,38 @@ class AccessLogRecorder
         /** @var ?Company $company set by AuthorizeCompany only once the actor's membership holds */
         $company = $request->attributes->get('company');
 
-        return new AccessOutcome($event, null, $actor?->getKey(), $company?->getKey());
+        return new AccessOutcome($accessEvent, null, $actor?->getKey(), $company?->getKey());
     }
 
     /** A failed write never fails the request; it is reported loudly instead. */
-    protected function writeOrReport(AccessOutcome $outcome, Closure $write): void
+    protected function writeOrReport(AccessOutcome $accessOutcome, Closure $write): void
     {
         try {
             $write();
-        } catch (Throwable $failure) {
-            report(new AccessLogWriteFailedException($outcome, $failure));
+        } catch (Throwable $throwable) {
+            report(new AccessLogWriteFailedException($accessOutcome, $throwable));
         }
     }
 
-    protected function fold(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function fold(AccessOutcome $accessOutcome, Request $request, Response $response): void
     {
         /** @var Route $route */
         $route = $request->route();
-        $repeated = AccessLogEntry::query()
-            ->where('event', $outcome->event)
+        $accessLogEntry = AccessLogEntry::query()
+            ->where('event', $accessOutcome->accessEvent)
             ->where('ip_address', $request->ip())
             ->where('route', $route->uri())
             ->where('http_method', $request->method())
-            ->where('user_id', $outcome->userId)
-            ->where('company_id', $outcome->companyId)
+            ->where('user_id', $accessOutcome->userId)
+            ->where('company_id', $accessOutcome->companyId)
             ->where('error_code', $this->errorCode($response))
             ->where('first_seen_at', '>', now()->subMinutes(self::FOLD_WINDOW_MINUTES))
             ->first();
 
-        if ($repeated === null) {
-            $this->insert($outcome, $request, $response);
+        if ($accessLogEntry === null) {
+            $this->insert($accessOutcome, $request, $response);
         } else {
-            $repeated->increment('occurrences', 1, ['last_seen_at' => now()]);
+            $accessLogEntry->increment('occurrences', 1, ['last_seen_at' => now()]);
         }
     }
 
@@ -108,13 +108,13 @@ class AccessLogRecorder
      * A noted outcome reaches each company its user is an active member of, all copies in one
      * statement so none is kept without the others; with no company it is the one platform row.
      */
-    protected function insertForEachCompany(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function insertForEachCompany(AccessOutcome $accessOutcome, Request $request, Response $response): void
     {
-        $row = $this->rowFor($outcome, $request, $response);
+        $row = $this->rowFor($accessOutcome, $request, $response);
 
         AccessLogEntry::query()->insert(array_map(
             fn (?string $companyId): array => [...$row, 'id' => Str::uuid7(), 'company_id' => $companyId],
-            $this->companiesOf($outcome->userId) ?: [null],
+            $this->companiesOf($accessOutcome->userId) ?: [null],
         ));
     }
 
@@ -126,33 +126,33 @@ class AccessLogRecorder
         return CompanyUser::query()->where('user_id', $userId)->pluck('company_id')->all();
     }
 
-    protected function insert(AccessOutcome $outcome, Request $request, Response $response): void
+    protected function insert(AccessOutcome $accessOutcome, Request $request, Response $response): void
     {
-        AccessLogEntry::query()->create($this->rowFor($outcome, $request, $response));
+        AccessLogEntry::query()->create($this->rowFor($accessOutcome, $request, $response));
     }
 
     /**
      * @return array<string, mixed>
      */
-    protected function rowFor(AccessOutcome $outcome, Request $request, Response $response): array
+    protected function rowFor(AccessOutcome $accessOutcome, Request $request, Response $response): array
     {
-        $origin = RequestOrigin::fromRequest($request);
+        $requestOrigin = RequestOrigin::fromRequest($request);
         /** @var Route $route */
         $route = $request->route();
         $seenAt = now();
 
         return [
-            'company_id' => $outcome->companyId,
-            'user_id' => $outcome->userId,
-            'event' => $outcome->event->value,
-            'reason' => $outcome->reason?->value,
+            'company_id' => $accessOutcome->companyId,
+            'user_id' => $accessOutcome->userId,
+            'event' => $accessOutcome->accessEvent->value,
+            'reason' => $accessOutcome->accessEventReason?->value,
             'http_method' => $request->method(),
             'route' => $route->uri(),
             'status' => $response->getStatusCode(),
             'error_code' => $this->errorCode($response),
-            'ip_address' => $origin->ip,
-            'user_agent' => $origin->boundedUserAgent(),
-            'request_id' => $origin->boundedRequestId(),
+            'ip_address' => $requestOrigin->ip,
+            'user_agent' => $requestOrigin->boundedUserAgent(),
+            'request_id' => $requestOrigin->boundedRequestId(),
             'first_seen_at' => $seenAt,
             'last_seen_at' => $seenAt,
         ];

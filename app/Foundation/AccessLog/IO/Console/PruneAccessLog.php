@@ -13,23 +13,23 @@ use App\Foundation\AccessLog\UseCases\Interactors\PruneExpiredAccessLogRowsInter
 #[Description('Delete access-log rows past their retention (defaults to now; --date replays a missed night).')]
 class PruneAccessLog extends Command
 {
-    public function handle(PruneExpiredAccessLogRowsInteractor $interactor): int
+    public function handle(PruneExpiredAccessLogRowsInteractor $pruneExpiredAccessLogRowsInteractor): int
     {
         try {
-            $at = CarbonImmutable::parse($this->option('date'))->utc();
+            $runAt = CarbonImmutable::parse($this->option('date'))->utc();
         } catch (InvalidFormatException) {
             $this->error('The --date option must be a date, such as 2026-11-17.');
 
             return self::FAILURE;
         }
 
-        if ($at->isFuture()) {
+        if ($runAt->isFuture()) {
             $this->error('The --date option cannot be later than now.');
 
             return self::FAILURE;
         }
 
-        $deleted = $interactor->execute($at);
+        $deleted = $pruneExpiredAccessLogRowsInteractor->execute($runAt);
 
         $this->info("{$deleted} expired access-log row(s) deleted.");
 

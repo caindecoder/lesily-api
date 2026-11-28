@@ -8,9 +8,9 @@ use App\Foundation\AccessLog\Values\AccessOutcome;
 
 class AccessLogWriteFailedException extends RuntimeException
 {
-    public function __construct(private readonly AccessOutcome $outcome, Throwable $previous)
+    public function __construct(private readonly AccessOutcome $accessOutcome, Throwable $throwable)
     {
-        parent::__construct("Access log write failed: {$outcome->event->value}.", previous: $previous);
+        parent::__construct("Access log write failed: {$accessOutcome->accessEvent->value}.", previous: $throwable);
     }
 
     /**
@@ -21,10 +21,10 @@ class AccessLogWriteFailedException extends RuntimeException
     public function context(): array
     {
         return [
-            'event' => $this->outcome->event->value,
-            'reason' => $this->outcome->reason?->value,
-            'user_id' => $this->outcome->userId,
-            'company_id' => $this->outcome->companyId,
+            'event' => $this->accessOutcome->accessEvent->value,
+            'reason' => $this->accessOutcome->accessEventReason?->value,
+            'user_id' => $this->accessOutcome->userId,
+            'company_id' => $this->accessOutcome->companyId,
         ];
     }
 }

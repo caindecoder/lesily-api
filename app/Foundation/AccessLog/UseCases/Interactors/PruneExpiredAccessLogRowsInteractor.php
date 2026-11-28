@@ -22,20 +22,20 @@ class PruneExpiredAccessLogRowsInteractor
     protected const int ROWS_PER_RUN = 1000;
 
     public function __construct(
-        protected readonly AuditTrailWriter $writer,
+        protected readonly AuditTrailWriter $auditTrailWriter,
     ) {}
 
-    public function execute(CarbonInterface $at): int
+    public function execute(CarbonInterface $runAt): int
     {
-        return DB::transaction(function () use ($at): int {
-            $expired = $this->expiredRows($at->toImmutable()->startOfDay())
+        return DB::transaction(function () use ($runAt): int {
+            $accessLogEntries = $this->expiredRows($runAt->toImmutable()->startOfDay())
                 ->orderBy('last_seen_at')
                 ->limit(self::ROWS_PER_RUN)
                 ->get(['id', 'company_id']);
 
-            $deleted = AccessLogEntry::query()->whereIn('id', $expired->modelKeys())->delete();
+            $deleted = AccessLogEntry::query()->whereIn('id', $accessLogEntries->modelKeys())->delete();
 
-            $expired->whereNotNull('company_id')->countBy('company_id')
+            $accessLogEntries->whereNotNull('company_id')->countBy('company_id')
                 ->each(fn (int $count, string $companyId) => $this->audit($companyId, $count));
 
             return $deleted;
@@ -44,7 +44,7 @@ class PruneExpiredAccessLogRowsInteractor
 
     protected function audit(string $companyId, int $count): void
     {
-        $this->writer->write([
+        $this->auditTrailWriter->write([
             'company_id' => $companyId,
             'stored_event_id' => null,
             'event_class' => 'AccessLogPurged',
@@ -58,17 +58,17 @@ class PruneExpiredAccessLogRowsInteractor
     /**
      * @return Builder<AccessLogEntry>
      */
-    protected function expiredRows(CarbonImmutable $day): Builder
+    protected function expiredRows(CarbonImmutable $runDate): Builder
     {
-        return AccessLogEntry::query()->where(function (Builder $expired) use ($day): void {
-            $expired->where(fn (Builder $row) => $row
+        return AccessLogEntry::query()->where(function (Builder $builder) use ($runDate): void {
+            $builder->where(fn (Builder $builder) => $builder
                 ->whereNull('company_id')
-                ->where('last_seen_at', '<', $this->cutoff($day, self::NO_COMPANY_RETENTION_YEARS)));
+                ->where('last_seen_at', '<', $this->cutoff($runDate, self::NO_COMPANY_RETENTION_YEARS)));
 
             foreach ($this->retentions() as $years) {
-                $expired->orWhere(fn (Builder $row) => $row
+                $builder->orWhere(fn (Builder $builder) => $builder
                     ->whereIn('company_id', DB::table('companies')->select('id')->where('access_log_retention_years', $years))
-                    ->where('last_seen_at', '<', $this->cutoff($day, $years)));
+                    ->where('last_seen_at', '<', $this->cutoff($runDate, $years)));
             }
         });
     }
@@ -82,8 +82,8 @@ class PruneExpiredAccessLogRowsInteractor
         return DB::table('companies')->distinct()->pluck('access_log_retention_years');
     }
 
-    protected function cutoff(CarbonImmutable $day, int $years): CarbonImmutable
+    protected function cutoff(CarbonImmutable $runDate, int $years): CarbonImmutable
     {
-        return $day->subYearsNoOverflow($years);
+        return $runDate->subYearsNoOverflow($years);
     }
 }
